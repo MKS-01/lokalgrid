@@ -1,7 +1,9 @@
-# Shared Field Node — project handoff
+# Lokalgrid — shared field node, project handoff
+
+> **Project name: Lokalgrid** *(2026-07-20)* — *lokal* (German: local) + grid: your own tiny infrastructure grid in the field, no carrier, no internet. Verified unique on GitHub at naming time (0 repos). Repo/dir name: `lokalgrid`.
 
 > Context file for resuming this project from a CLI agent session.
-> Drop this at the repo root. Companion doc: `gps-tracker-master-plan.html` (same content, rendered, with wireframes and diagrams).
+> Drop this at the repo root. Companion doc: `lokalgrid-master-plan.html` (same content, rendered, with wireframes and diagrams, plus the §14 concept-rethink record).
 
 ---
 
@@ -88,6 +90,8 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | **ESP-IDF v5.x + CMake directly** | Not Arduino (hides sleep/NimBLE/power APIs). Not PlatformIO (IDF support lags on S3). |
 | **Hand-write the codec first, generate later** | Codegen is introduced in Phase 05, *after* drift has caused a real bug. Understanding beats compliance. |
 | **Uncertainty is rendered, always** | Error ellipses from HDOP, dashed interpolated segments, ages on stale positions. No consumer tracker does this; it is the product's honesty and its identity. |
+| **Chat = one shared channel, text only** *(2026-07-20)* | No DMs, no channels, no media at launch. One room mirrors the product (one node, one group in the field) and keeps Phase 03 small. Revisit only after Phase 03 is alive. |
+| **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Nothing serves multiple phones a node-hosted PWA; the gap is still open. Shared field node stands. |
 
 ### REJECTED — do not re-propose
 

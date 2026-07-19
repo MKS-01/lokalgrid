@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @PROJECT.md
 
-`PROJECT.md` is a decision record, not documentation. Sections 1–6 are binding constraints; section 9 is where work resumes. `gps-tracker-master-plan.html` is the same content rendered — if you change one, change both.
+`PROJECT.md` is a decision record, not documentation. Sections 1–6 are binding constraints; section 9 is where work resumes. `lokalgrid-master-plan.html` is the same content rendered (plus the §14 rethink record) — if you change one, change both. The project is named **Lokalgrid**.
 
 **Section 2 lists explicitly rejected features** (eFuse key burn, tamper detection, solar, OTA, enclosure, microSD archive, magnetometer heading, cloud backend). Do not re-propose them without reading the rationale first.
 

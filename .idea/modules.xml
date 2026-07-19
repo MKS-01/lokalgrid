@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/unamed-gps.iml" filepath="$PROJECT_DIR$/.idea/unamed-gps.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/lokalgrid.iml" filepath="$PROJECT_DIR$/.idea/lokalgrid.iml" />
     </modules>
   </component>
 </project>

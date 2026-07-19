@@ -3,18 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Custom GPS tracker — master plan</title>
+<title>Lokalgrid — master plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#E9EDEB;--card:#FAFCFB;--ink:#101A17;--ink-2:#4C5C57;--ink-3:#7A8A85;
-  --rule:#C6D1CD;--rule-2:#DCE4E1;
-  --lock:#0E6B59;--lock-bg:#DCECE7;
-  --sig:#A85D0B;--sig-bg:#F6E8D6;
-  --lora:#524383;--lora-bg:#E6E2F0;
-  --warn:#93372B;--warn-bg:#F6E1DD;
+  color-scheme:dark;
+  --paper:#101614;--card:#171F1C;--ink:#E4EBE8;--ink-2:#A9B8B2;--ink-3:#7C8B85;
+  --rule:#33403C;--rule-2:#222C29;
+  --deep:#0A0F0E;
+  --lock:#4EC2A6;--lock-bg:#123129;
+  --sig:#E39A4E;--sig-bg:#372511;
+  --lora:#A99BDB;--lora-bg:#262038;
+  --warn:#E4776A;--warn-bg:#3B1B15;
   --disp:"IBM Plex Sans Condensed",system-ui,sans-serif;
   --body:"IBM Plex Sans",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,monospace;
@@ -29,7 +31,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);f
 a{color:var(--lock)}
 :focus-visible{outline:2px solid var(--sig);outline-offset:3px}
 
-nav.bar{position:sticky;top:0;z-index:20;background:var(--ink);border-bottom:1px solid var(--ink)}
+nav.bar{position:sticky;top:0;z-index:20;background:var(--deep);border-bottom:1px solid var(--rule)}
 nav.bar .inner{max-width:1080px;margin:0 auto;padding:0 18px;display:flex;gap:0;overflow-x:auto;scrollbar-width:none}
 nav.bar .inner::-webkit-scrollbar{display:none}
 nav.bar a{color:#9FB3AD;text-decoration:none;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
@@ -68,7 +70,7 @@ tbody tr:last-child td{border-bottom:0}
 td.m,th.m{font-family:var(--mono);font-size:12.3px;white-space:nowrap}
 .tw{overflow-x:auto}
 
-pre{background:var(--ink);color:#DCE6E2;font-family:var(--mono);font-size:12.4px;line-height:1.68;padding:15px 17px;overflow-x:auto;margin:6px 0 18px}
+pre{background:var(--deep);color:#DCE6E2;font-family:var(--mono);font-size:12.4px;line-height:1.68;padding:15px 17px;overflow-x:auto;margin:6px 0 18px}
 pre b{color:#8FD6C2;font-weight:400}
 pre i{color:#7C8D88;font-style:normal}
 pre u{color:#E5A85C;text-decoration:none}
@@ -84,9 +86,9 @@ pre u{color:#E5A85C;text-decoration:none}
 .hw .blk.t{fill:var(--lock-bg);stroke:var(--lock)}
 .hw .blk.r{fill:var(--lora-bg);stroke:var(--lora)}
 .hw .blk.p{fill:var(--sig-bg);stroke:var(--sig)}
-.hw .blk.mcu{fill:var(--ink);stroke:var(--ink)}
+.hw .blk.mcu{fill:var(--deep);stroke:var(--ink)}
 .hw .tl{font-family:var(--disp);font-size:13.5px;font-weight:600;fill:var(--ink)}
-.hw .tl.inv{fill:var(--paper)}
+.hw .tl.inv{fill:var(--ink)}
 .hw .sb{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
 .hw .sb.inv{fill:#9FB3AD}
 .hw .bus{stroke:var(--ink);stroke-width:1;fill:none}
@@ -106,7 +108,7 @@ pre u{color:#E5A85C;text-decoration:none}
 .f.b{background:var(--sig-bg);color:var(--sig)}
 .f.c{background:var(--card);color:var(--ink-2)}
 .f.d{background:var(--lora-bg);color:var(--lora)}
-.f.e{background:var(--ink);color:var(--paper)}
+.f.e{background:var(--deep);color:var(--ink)}
 .f span{display:block;font-weight:400;font-size:9.5px;opacity:.72;margin-top:2px}
 .ruler{display:grid;grid-template-columns:repeat(32,1fr);min-width:700px;font-family:var(--mono);font-size:9px;color:var(--ink-3);margin-top:4px}
 .ruler i{font-style:normal;text-align:center;border-top:1px solid var(--rule);padding-top:3px}
@@ -114,7 +116,7 @@ pre u{color:#E5A85C;text-decoration:none}
 
 .screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:18px;margin:10px 0 6px}
 .dev{border:2px solid var(--ink);background:var(--card);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-.sysbar{background:var(--ink);color:#9FB3AD;font-family:var(--mono);font-size:9.5px;padding:4px 10px;display:flex;justify-content:space-between}
+.sysbar{background:var(--deep);color:#9FB3AD;font-family:var(--mono);font-size:9.5px;padding:4px 10px;display:flex;justify-content:space-between}
 .appbar{padding:9px 12px;border-bottom:1px solid var(--ink);display:flex;justify-content:space-between;align-items:center}
 .appbar b{font-family:var(--disp);font-size:16px;font-weight:600}
 .appbar span{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
@@ -178,13 +180,14 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <a href="#roadmap">11 Roadmap</a>
   <a href="#risks">12 Risks</a>
   <a href="#future">13 Future</a>
+  <a href="#rethink">14 Rethink</a>
 </div></nav>
 
 <div class="wrap">
 
 <header class="top">
   <div class="kicker">LILYGO T-Beam Supreme (S3-Core v3.0 + baseboard) · L76K · SX1262 · Kotlin · Galaxy S25 · program plan</div>
-  <h1>Shared field node<em>a hobby build, three weekends in</em></h1>
+  <h1>Lokalgrid<em>a shared field node — hobby build</em></h1>
   <p class="thesis">One device carrying the GNSS, the storage and the long-range link, shared by two or three phones at once, none of which install anything. Built for the engineering rather than for users — so it is scoped to reach something that works early, and to be abandonable without guilt after that.</p>
   <div class="strip">
     <div><span class="dot"></span><b>Device</b> ESP-IDF, FreeRTOS</div>
@@ -1025,7 +1028,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
 
     <div class="phase"><div class="n">03</div><div>
       <h4>Three phones, shared state</h4>
-      <p>Per-client cursors, message history, chat, everyone seeing everyone. This is the local island and it is a <b>complete project</b> — if you stop here you have built something real and learned the multi-client model.</p>
+      <p>Per-client cursors, message history, chat, everyone seeing everyone. Chat is deliberately small: <b>one shared channel, text only</b> — no DMs, no channels, no media. One room mirrors the product (one node, one group in the field). This is the local island and it is a <b>complete project</b> — if you stop here you have built something real and learned the multi-client model.</p>
       <em>two weekends · <b>natural stopping point</b></em>
     </div></div>
 
@@ -1088,7 +1091,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
 </section>
 
 <!-- ============ 13 FUTURE ============ -->
-<section id="future" style="border-bottom:0">
+<section id="future">
   <div class="rail"><span class="no">13</span>Future<p>Adjacent projects for when this one stops being the interesting problem.</p></div>
   <div class="body">
     <h2>Where it goes next</h2>
@@ -1107,6 +1110,51 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
       <li><b>OOK decoder</b> — the SX1262 does raw on-off keying, so the same board can decode your doorbell and weather station while it isn't tracking.</li>
     </ul>
     <div class="note ok"><b>No rule for any of the above.</b> These are not a backlog and they are not owed anything. If the vibration analyser sounds better than the LoRa layer one Saturday, build the vibration analyser — the hardware does not care and neither does anyone else. The only real failure mode for this project is grinding through a phase you stopped enjoying because a plan said so.</div>
+  </div>
+</section>
+
+<!-- ============ 14 RETHINK ============ -->
+<section id="rethink" style="border-bottom:0">
+  <div class="rail"><span class="no">14</span>Rethink<p>The 2026-07-20 concept review — what else this board could have become, and why it didn't.</p></div>
+  <div class="body">
+    <h2>What this board can become — and what was picked</h2>
+    <p>Before writing any code, the concept was re-opened and surveyed against everything already running on this board class in 2026. This section is the record of that review, merged from the former <code>build-options.html</code>.</p>
+
+    <h3>The landscape</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Project</th><th>What it is</th><th>Band / licence notes</th></tr></thead>
+      <tbody>
+        <tr><td class="m"><a href="https://meshtastic.org/docs/introduction/">Meshtastic</a></td><td>Flood-routing LoRa mesh, native apps, huge community. Currently flashed on this board.</td><td>Region <code>IN</code> = 865–867 MHz. Licence-free.</td></tr>
+        <tr><td class="m"><a href="https://meshamerica.com/2026/04/26/meshtastic-vs-meshcore-which-firmware-fits-your-network/">MeshCore</a></td><td>Newer mesh, real routing, three node roles incl. <b>Room Server</b> (node hosting persistent group chat). Closest neighbour to this project — but native-app only, no web client served from the node.</td><td>Same bands. Incompatible with Meshtastic.</td></tr>
+        <tr><td class="m"><a href="https://github.com/attermann/microReticulum_Firmware">microReticulum</a></td><td>RNode fork embedding the Reticulum crypto-mesh stack — a self-contained transport node on a T-Beam.</td><td>Licence-free at LoRa power.</td></tr>
+        <tr><td class="m"><a href="https://github.com/lyusupov/SoftRF/wiki/Prime-Edition-MkIII">SoftRF Mk III</a></td><td>General-aviation proximity awareness; the Prime MkIII <em>is</em> a T-Beam Supreme.</td><td>Varies by region.</td></tr>
+        <tr><td class="m"><a href="https://tinygs.com/">TinyGS</a></td><td>Distributed LoRa satellite ground-station network — flash, configure, receive cubesat telemetry.</td><td>RX-only, no licence. Most LoRa sats on <b>433 MHz</b>.</td></tr>
+        <tr><td class="m"><a href="https://n9eod.com/weather-balloon-radiosonde-tracking/rdzttgosonde-tracker/">rdzTTGOsonde</a> / <a href="https://www.rtl-sdr.com/mysondy-radiosonde-tracking-firmware-for-a-ttgo-esp32-lora-board/">MySondyGO</a></td><td>Receive RS41/M10/DFM weather-balloon radiosondes near 400–406 MHz; chase fallen sondes via SondeHub.</td><td>RX-only, no licence. Needs the 433 MHz hardware variant.</td></tr>
+        <tr><td class="m">LoRa APRS (CA2RXU / OE5BPA)</td><td>Two-way APRS tracker / iGate over LoRa on this exact board.</td><td><b>TX needs a ham licence in India.</b> RX is free.</td></tr>
+        <tr><td class="m"><a href="https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series">LilyGo-LoRa-Series</a></td><td>LilyGO's official per-peripheral Arduino examples — the pin-map and init-sequence reference for Phase 01, even from ESP-IDF. Not a product.</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note ok"><b>The gap.</b> Nothing in that table serves <b>multiple phones a web app from the node itself</b> — every firmware assumes one native app per node. And nothing lets the phone re-task the radio. This project's concept sits exactly in that gap, and the 2026 survey confirmed it is still open.</div>
+
+    <h3>The four directions considered</h3>
+    <div class="tw"><table>
+      <thead><tr><th></th><th>Direction</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td class="m"><b>A</b></td><td><b>Shared field node, as planned.</b> Board is the station; up to 3 phones connect; everyone sees everyone on one map with honest uncertainty; one chat.</td><td><b>PICKED — 2026-07-20.</b> Still novel, already scoped, nothing thrown away.</td></tr>
+        <tr><td class="m">B</td><td><b>Field instrument station.</b> Same chassis, but the PWA can re-task the SX1262 between tracker / TinyGS satellite RX / RS41 sonde RX / sniffer modes — one mode owns the radio at a time.</td><td>Not rejected — <b>parked</b>. The modes remain adjacent projects (section 13); nothing in Phases 01–05 blocks adding them later. Tilts the band preference toward 433.</td></tr>
+        <tr><td class="m">C</td><td><b>Rebuild on Reticulum</b> — standalone RNS transport node with a PWA gateway.</td><td>Rejected: adopts a large stack instead of hand-writing the protocol — against the learning goals.</td></tr>
+        <tr><td class="m">D</td><td><b>Pivot to existing firmware</b> (TinyGS / sonde hunting).</td><td>A Saturday detour, not a project. Already blessed as such by the hobby constraints.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Decisions carried out of the rethink</h3>
+    <ul>
+      <li><b>Concept reconfirmed:</b> shared field node — GPS + tracker + chat, board as station, multiple phones, everyone visible on the map.</li>
+      <li><b>Chat scoped:</b> one shared channel, text only at launch. No DMs, no channels, no media — one room mirrors one node, one group. Revisit only after Phase 03 is alive.</li>
+      <li><b>Band preference sharpened:</b> if the silkscreen turns out to read 433 MHz, that is now the <em>preferred</em> outcome (satellites and sondes live there for the parked option B). Still read the silkscreen before buying the whip.</li>
+      <li><b>Roadmap unchanged:</b> Phases 01–03 were identical under every serious option, so nothing moved.</li>
+    </ul>
+    <p class="caption" style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">Recorded in <code>PROJECT.md</code> §2 the same day. This section supersedes the former <code>build-options.html</code>.</p>
   </div>
 </section>
 
