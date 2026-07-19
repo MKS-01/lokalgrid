@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom GPS tracker — master plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9EDEB;--card:#FAFCFB;--ink:#101A17;--ink-2:#4C5C57;--ink-3:#7A8A85;
+  --rule:#C6D1CD;--rule-2:#DCE4E1;
+  --lock:#0E6B59;--lock-bg:#DCECE7;
+  --sig:#A85D0B;--sig-bg:#F6E8D6;
+  --lora:#524383;--lora-bg:#E6E2F0;
+  --warn:#93372B;--warn-bg:#F6E1DD;
+  --disp:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--rule-2) 1px,transparent 1px),linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);
+  background-size:28px 28px;background-position:-1px -1px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 100px}
+a{color:var(--lock)}
+:focus-visible{outline:2px solid var(--sig);outline-offset:3px}
+
+nav.bar{position:sticky;top:0;z-index:20;background:var(--ink);border-bottom:1px solid var(--ink)}
+nav.bar .inner{max-width:1080px;margin:0 auto;padding:0 18px;display:flex;gap:0;overflow-x:auto;scrollbar-width:none}
+nav.bar .inner::-webkit-scrollbar{display:none}
+nav.bar a{color:#9FB3AD;text-decoration:none;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:11px 13px;white-space:nowrap;border-bottom:2px solid transparent}
+nav.bar a:hover{color:#FFF;border-bottom-color:var(--sig)}
+
+header.top{padding:52px 0 34px;border-bottom:2px solid var(--ink)}
+.kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+h1{font-family:var(--disp);font-weight:700;letter-spacing:-.015em;font-size:clamp(36px,6.6vw,64px);line-height:.98;margin:14px 0 0;text-transform:uppercase}
+h1 em{font-style:normal;display:block;color:var(--ink-3)}
+.thesis{max-width:56ch;margin:22px 0 0;font-size:18px;color:var(--ink-2)}
+.strip{display:flex;flex-wrap:wrap;margin-top:30px;border:1px solid var(--rule);background:var(--card);font-family:var(--mono);font-size:11.5px}
+.strip div{padding:9px 14px;border-right:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.strip div:last-child{border-right:0}
+.strip b{color:var(--ink);font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--lock);margin-right:7px;vertical-align:1px}
+@media (prefers-reduced-motion:no-preference){.dot{animation:blip 2.6s ease-in-out infinite}@keyframes blip{0%,72%,100%{opacity:1}82%{opacity:.2}}}
+
+section{display:grid;grid-template-columns:152px minmax(0,1fr);gap:0 40px;padding:46px 0;border-bottom:1px solid var(--rule)}
+.rail{font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--ink-3);letter-spacing:.04em}
+.rail .no{display:block;font-size:13px;color:var(--ink);font-weight:600;margin-bottom:6px}
+.rail p{margin:12px 0 0}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(24px,3.3vw,32px);line-height:1.1;margin:0 0 14px;letter-spacing:-.01em}
+h3{font-family:var(--disp);font-weight:600;font-size:18px;margin:32px 0 8px}
+h4{font-family:var(--disp);font-weight:600;font-size:15.5px;margin:22px 0 6px}
+p{margin:0 0 14px;max-width:70ch}
+ul,ol{margin:0 0 14px;padding-left:20px;max-width:70ch}
+li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.87em;background:var(--card);border:1px solid var(--rule-2);padding:1px 5px;border-radius:3px}
+.body>*:last-child{margin-bottom:0}
+
+table{width:100%;border-collapse:collapse;margin:6px 0 18px;font-size:13.8px;background:var(--card)}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--ink)}
+tbody tr:last-child td{border-bottom:0}
+td.m,th.m{font-family:var(--mono);font-size:12.3px;white-space:nowrap}
+.tw{overflow-x:auto}
+
+pre{background:var(--ink);color:#DCE6E2;font-family:var(--mono);font-size:12.4px;line-height:1.68;padding:15px 17px;overflow-x:auto;margin:6px 0 18px}
+pre b{color:#8FD6C2;font-weight:400}
+pre i{color:#7C8D88;font-style:normal}
+pre u{color:#E5A85C;text-decoration:none}
+
+.note{border-left:3px solid var(--sig);background:var(--sig-bg);padding:12px 16px;margin:6px 0 18px;font-size:14.5px}
+.note.bad{border-left-color:var(--warn);background:var(--warn-bg)}
+.note.ok{border-left-color:var(--lock);background:var(--lock-bg)}
+.note b{font-weight:600}
+
+.hw{background:var(--card);border:1px solid var(--rule);padding:10px;margin:6px 0 10px;overflow-x:auto}
+.hw svg{display:block;min-width:820px;width:100%;height:auto}
+.hw .blk{fill:var(--card);stroke:var(--ink);stroke-width:1}
+.hw .blk.t{fill:var(--lock-bg);stroke:var(--lock)}
+.hw .blk.r{fill:var(--lora-bg);stroke:var(--lora)}
+.hw .blk.p{fill:var(--sig-bg);stroke:var(--sig)}
+.hw .blk.mcu{fill:var(--ink);stroke:var(--ink)}
+.hw .tl{font-family:var(--disp);font-size:13.5px;font-weight:600;fill:var(--ink)}
+.hw .tl.inv{fill:var(--paper)}
+.hw .sb{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.hw .sb.inv{fill:#9FB3AD}
+.hw .bus{stroke:var(--ink);stroke-width:1;fill:none}
+.hw .buslab{font-family:var(--mono);font-size:9.5px;fill:var(--ink-2);text-anchor:middle}
+.legend{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:0 0 18px}
+.legend i{font-style:normal;display:inline-block;width:9px;height:9px;margin:0 5px 0 14px;border:1px solid}
+.legend i:first-child{margin-left:0}
+.lg-t{background:var(--lock-bg);border-color:var(--lock)!important}
+.lg-r{background:var(--lora-bg);border-color:var(--lora)!important}
+.lg-p{background:var(--sig-bg);border-color:var(--sig)!important}
+
+.bytemap{border:1px solid var(--rule);background:var(--card);padding:16px 14px 12px;margin:6px 0 8px;overflow-x:auto}
+.bmgrid{display:grid;grid-template-columns:repeat(32,1fr);min-width:700px}
+.bmgrid .f{border:1px solid var(--ink);border-right:0;padding:12px 4px 10px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:600;line-height:1.2}
+.bmgrid .f:last-child{border-right:1px solid var(--ink)}
+.f.a{background:var(--lock-bg);color:var(--lock)}
+.f.b{background:var(--sig-bg);color:var(--sig)}
+.f.c{background:var(--card);color:var(--ink-2)}
+.f.d{background:var(--lora-bg);color:var(--lora)}
+.f.e{background:var(--ink);color:var(--paper)}
+.f span{display:block;font-weight:400;font-size:9.5px;opacity:.72;margin-top:2px}
+.ruler{display:grid;grid-template-columns:repeat(32,1fr);min-width:700px;font-family:var(--mono);font-size:9px;color:var(--ink-3);margin-top:4px}
+.ruler i{font-style:normal;text-align:center;border-top:1px solid var(--rule);padding-top:3px}
+.caption{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:8px 0 18px}
+
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:18px;margin:10px 0 6px}
+.dev{border:2px solid var(--ink);background:var(--card);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.sysbar{background:var(--ink);color:#9FB3AD;font-family:var(--mono);font-size:9.5px;padding:4px 10px;display:flex;justify-content:space-between}
+.appbar{padding:9px 12px;border-bottom:1px solid var(--ink);display:flex;justify-content:space-between;align-items:center}
+.appbar b{font-family:var(--disp);font-size:16px;font-weight:600}
+.appbar span{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.scr{padding:11px 12px;flex:1;font-size:12.6px}
+.tabs{display:flex;border-top:1px solid var(--ink);font-family:var(--mono);font-size:9px;text-align:center}
+.tabs div{flex:1;padding:7px 2px;color:var(--ink-3);border-right:1px solid var(--rule-2);letter-spacing:.04em}
+.tabs div:last-child{border-right:0}
+.tabs div.on{color:var(--lock);font-weight:600;box-shadow:inset 0 2px 0 var(--lock)}
+.row{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule-2);font-family:var(--mono);font-size:11px}
+.row:last-child{border-bottom:0}
+.row b{font-weight:600}
+.pill{display:inline-block;font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:2px;white-space:nowrap}
+.pill.ok{background:var(--lock-bg);color:var(--lock)}
+.pill.w{background:var(--warn-bg);color:var(--warn)}
+.pill.n{background:var(--sig-bg);color:var(--sig)}
+.pill.l{background:var(--lora-bg);color:var(--lora)}
+.big{font-family:var(--mono);font-size:17px;font-weight:500;line-height:1.4;margin:4px 0 8px}
+.bar{height:6px;background:var(--rule-2);margin:7px 0 4px}
+.bar i{display:block;height:100%;background:var(--sig)}
+.card{border:1px solid var(--rule);padding:7px 9px;margin-bottom:7px}
+.card.sel{border-color:var(--lock);border-width:1px;background:var(--lock-bg)}
+.card b{font-family:var(--mono);font-size:11px;font-weight:600;display:block}
+.card span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.maparea{border:1px solid var(--rule);height:112px;position:relative;margin-bottom:8px;
+  background-image:linear-gradient(var(--rule-2) 1px,transparent 1px),linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);background-size:16px 16px}
+.maparea svg{position:absolute;inset:0;width:100%;height:100%}
+.lbl{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin:9px 0 4px}
+.btn{border:1px solid var(--ink);padding:6px 10px;font-family:var(--mono);font-size:10.5px;text-align:center;margin-top:8px}
+.btn.p{background:var(--ink);color:var(--paper)}
+
+.phase{display:grid;grid-template-columns:46px minmax(0,1fr);gap:0 18px;padding:15px 0;border-top:1px solid var(--rule-2)}
+.phase:first-of-type{border-top:1px solid var(--ink)}
+.phase .n{font-family:var(--disp);font-weight:700;font-size:26px;color:var(--rule);line-height:1}
+.phase h4{margin:0 0 4px;font-size:17px}
+.phase p{margin:0;font-size:14.4px;color:var(--ink-2)}
+.phase em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--sig);display:block;margin-top:6px}
+
+footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+
+@media (max-width:800px){
+  section{grid-template-columns:1fr;padding:34px 0}
+  .rail{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--rule-2)}
+  .rail p{display:none}
+  .wrap{padding:0 16px 70px}
+}
+</style>
+</head>
+<body>
+
+<nav class="bar"><div class="inner">
+  <a href="#concept">01 Concept</a>
+  <a href="#hardware">02 Hardware</a>
+  <a href="#power">03 Power</a>
+  <a href="#firmware">04 Firmware</a>
+  <a href="#protocol">05 Protocol</a>
+  <a href="#software">06 Software</a>
+  <a href="#wireframes">07 Wireframes</a>
+  <a href="#android">08 Clients</a>
+  <a href="#cli">09 CLI</a>
+  <a href="#testing">10 Testing</a>
+  <a href="#roadmap">11 Roadmap</a>
+  <a href="#risks">12 Risks</a>
+  <a href="#future">13 Future</a>
+</div></nav>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">LILYGO T-Beam Supreme (S3-Core v3.0 + baseboard) · L76K · SX1262 · Kotlin · Galaxy S25 · program plan</div>
+  <h1>Shared field node<em>a hobby build, three weekends in</em></h1>
+  <p class="thesis">One device carrying the GNSS, the storage and the long-range link, shared by two or three phones at once, none of which install anything. Built for the engineering rather than for users — so it is scoped to reach something that works early, and to be abandonable without guilt after that.</p>
+  <div class="strip">
+    <div><span class="dot"></span><b>Device</b> ESP-IDF, FreeRTOS</div>
+    <div><b>Links</b> BLE idle · WiFi AP on demand · LoRa</div>
+    <div><b>Clients</b> browser, 3 max</div>
+    <div><b>Shared</b> KMP protocol</div>
+    <div><b>Tooling</b> JVM CLI</div>
+    <div><b>First milestone</b> ~3 weekends</div>
+  </div>
+</header>
+
+<!-- ============ 01 CONCEPT ============ -->
+<section id="concept">
+  <div class="rail"><span class="no">01</span>Concept<p>A hobby project succeeds by staying interesting, not by finding users.</p></div>
+  <div class="body">
+    <h2>Why this exists</h2>
+
+    <h3>The phone question</h3>
+    <p>Your S25 has better GNSS hardware than this board. Dual-band L1+L5, assisted fixes over cellular in seconds where the L76K takes thirty from cold, multi-constellation fusion, and years of vendor tuning behind it. Any plan that ignores that is dishonest, so deal with it first: <b>if the thing you want to track is yourself, do not build this.</b> Install a logging app and get better data in five minutes.</p>
+    <p>The case for dedicated hardware begins exactly where the phone stops.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Requirement</th><th>Phone</th><th>This tracker</th></tr></thead>
+      <tbody>
+        <tr><td>Runtime, continuous logging</td><td>~8 hours</td><td>Weeks to months</td></tr>
+        <tr><td><b>Sits on the asset, not on you</b></td><td>Only if the asset is you</td><td>Yes — this is the whole point</td></tr>
+        <tr><td>Survives being switched off or discarded</td><td>Thief’s first action</td><td>No screen, no obvious off switch</td></tr>
+        <tr><td>Alerting with no cell coverage</td><td>Fix yes, alert no</td><td>LoRa beacon</td></tr>
+        <tr><td>Guaranteed sampling interval</td><td>The OS decides</td><td>You decide</td></tr>
+        <tr><td>Strap it to a bike and forget it</td><td>₹80,000 says no</td><td>₹6,000 says maybe</td></tr>
+        <tr><td>Raw NMEA, 1PPS edge, raw IMU stream</td><td>Not exposed</td><td>Direct access</td></tr>
+      </tbody>
+    </table></div>
+    <p>Two of those rows do the real work. The first is <b>ownership of the asset</b> — tracking means the device is on the thing and you are not, and a phone in your pocket cannot tell you your bike left the compound while you slept. The second is <b>the operating system</b>: Android will not let you sample location every ten seconds for a week. Doze, app standby and One UI’s own battery management will throttle or kill you, silently, and no permission turns that off. A dedicated device has no OS with opinions about your background work.</p>
+    <p>The third is quieter but matters for everything in section 13: Android hands you a fused, filtered <code>Location</code> object. It will not give you per-satellite SNR, a nanosecond-accurate 1PPS edge, or a guaranteed 200 Hz IMU stream. Half the interesting extensions need the layer underneath the one Android exposes.</p>
+
+    <h3>What this is, and what it is not</h3>
+    <p>This is a hobby build. That is not a hedge — it is a design constraint, and a stricter one than a product brief. A product has to be finished; a hobby project has to stay <em>interesting</em>, and it is allowed to end the moment it stops being so. Everything below is scoped by that.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Because it is a hobby build…</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr><td>Nobody depends on it</td><td>No OTA, no enclosure, no field hardening, no unattended deployment. Roughly a third of a product roadmap, deleted.</td></tr>
+        <tr><td>The learning is the point</td><td>Keep the parts that teach: multi-client arbitration, generated wire formats, an embedded web stack, a real debugger.</td></tr>
+        <tr><td>Motivation is the scarce resource</td><td>Reorder for the earliest visible milestone. Three phones on a shared map in week two, not week seven.</td></tr>
+        <tr><td>It may be abandoned</td><td>Design a natural stopping point that is still a complete thing. The local island qualifies; a half-built LoRa layer does not.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note ok"><b>Permission granted.</b> You do not need a use case. &ldquo;I want to understand how this class of system works&rdquo; is a complete reason, and it is the honest one here. If a trekking group or a riding club later wants it, good — but do not let a hypothetical user dictate the build order of something you are making for yourself.</div>
+
+    <h3>Logger, tracker, or something with an opinion</h3>
+    <p>A <em>logger</em> records and waits to be asked. A <em>tracker</em> notices things and tells you. The gap between them is entirely firmware, and it's where all the interesting work lives — the device has to decide, without connectivity, whether something is worth reporting.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Capability</th><th class="m">Logger</th><th class="m">Tracker</th><th>What it costs you</th></tr></thead>
+      <tbody>
+        <tr><td>Timestamped position log</td><td class="m">yes</td><td class="m">yes</td><td>NMEA parsing, flash writes</td></tr>
+        <tr><td>Bulk sync to phone</td><td class="m">yes</td><td class="m">yes</td><td>Custom GATT, resumable transfer</td></tr>
+        <tr><td>Motion-gated logging</td><td class="m">—</td><td class="m">yes</td><td>IMU interrupt config, wake logic</td></tr>
+        <tr><td>On-device geofencing</td><td class="m">—</td><td class="m">yes</td><td>Polygon compiler, hysteresis</td></tr>
+        <tr><td>Out-of-range alerting</td><td class="m">—</td><td class="m">yes</td><td>LoRa beacon, duty-cycle budget</td></tr>
+        <tr><td>Tamper detection</td><td class="m">—</td><td class="m">yes</td><td>Free-fall/tap ISR, case switch</td></tr>
+        <tr><td>Multi-client arbitration</td><td class="m">—</td><td class="m">yes</td><td>Scheduler, per-client cursors, backpressure</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Design commitments</h3>
+    <ul>
+      <li><b>Offline is the default state, not the error state.</b> Every feature must work with the phone in another country. Connectivity only makes things faster, never possible.</li>
+      <li><b>The device owns policy, the app owns presentation.</b> Geofences are evaluated on the device. The app draws them and pushes them down; it never evaluates them itself for live decisions.</li>
+      <li><b>One protocol implementation.</b> Written once in Kotlin, consumed by the app, the CLI, and the test harness. The firmware conforms to a spec, not to whatever the app happens to send.</li>
+      <li><b>Everything runs on hardware you control.</b> Not an ideological position — a practical one. A design whose sync path depends on a hosted service has a failure mode you cannot debug and a lifespan you do not set.</li>
+    </ul>
+    <h3>What the hard parts actually are</h3>
+    <p>Reading GPS and printing coordinates is an afternoon. The engineering that makes this worth three months sits in four places, and none of them are the sensor.</p>
+    <ul>
+      <li><b>Protocol design.</b> BLE hands you a stream of notifications with no framing, no ordering guarantee across reconnects, and no resume. Everything above that you build: sequence numbers, CRC, application-level flow control, resume-from-offset.</li>
+      <li><b>Ownership boundaries.</b> Deciding which side is authoritative about what. This is the root cause of nearly every sync bug in real products, and getting it right once teaches you to spot it everywhere.</li>
+      <li><b>Time reconstruction.</b> The device has no trustworthy clock without a fix, so the phone has to repair the timeline afterwards from a monotonic counter and the fixes on either side.</li>
+      <li><b>Constrained storage.</b> Fixed-width records, ring buffers, and the reason parsing is the enemy of seeking.</li>
+    </ul>
+    <p>By the end you can point a sniffer at any commercial BLE gadget and recognise what its designers did, and where they cut corners.</p>
+  </div>
+</section>
+
+<!-- ============ 02 HARDWARE ============ -->
+<section id="hardware">
+  <div class="rail"><span class="no">02</span>Hardware<p>All of this is on the board already. Only the antenna, enclosure and reed switch are additions.</p></div>
+  <div class="body">
+    <h2>Hardware architecture</h2>
+    <div class="note ok"><b>What you have.</b> The T-Beam Supreme is the S3-Core v3.0 module seated in a baseboard — which is why the silkscreen reads S3-Core. That gives you the full set: ESP32-S3, SX1262, L76K GNSS, AXP2101, QMI8658 IMU, QMC6310 magnetometer, BME280, PCF8563 RTC, 1.3" OLED, microSD and an 18650 holder. Nothing in this plan needs a breakout board. <b>Confirm the LoRa band from the silkscreen beside the SMA connector before buying an antenna</b> — variants exist at 433, 868 and 915 MHz and they are not interchangeable.</div>
+    <div class="hw">
+      <svg viewBox="0 0 900 410" role="img" aria-label="Block diagram of tracker hardware around the ESP32-S3">
+        <rect class="blk mcu" x="330" y="100" width="240" height="200" rx="6"/>
+        <text class="tl inv" x="450" y="180" text-anchor="middle">ESP32-S3FN8</text>
+        <text class="sb inv" x="450" y="200" text-anchor="middle">dual core · 8 MB flash · 8 MB PSRAM</text>
+        <text class="sb inv" x="450" y="216" text-anchor="middle">built-in USB-JTAG debugger</text>
+
+        <rect class="blk t" x="40" y="112" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="130">GNSS (L76K/M10S)</text><text class="sb" x="52" y="145">u.FL active antenna</text>
+        <path class="bus" d="M230 132 H326"/><text class="buslab" x="278" y="127">UART1</text>
+
+        <rect class="blk t" x="40" y="162" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="180">QMI8658 IMU</text><text class="sb" x="52" y="195">accel + gyro + INT</text>
+        <path class="bus" d="M230 182 H326"/><text class="buslab" x="278" y="177">I²C</text>
+
+        <rect class="blk t" x="40" y="212" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="230">BME280 + QMC6310</text><text class="sb" x="52" y="245">baro, temp, heading</text>
+        <path class="bus" d="M230 232 H326"/><text class="buslab" x="278" y="227">I²C</text>
+
+        <rect class="blk" x="40" y="262" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="280">Tamper switch</text><text class="sb" x="52" y="295">reed, wake-on-low</text>
+        <path class="bus" d="M230 282 H326"/><text class="buslab" x="278" y="277">GPIO</text>
+
+        <rect class="blk r" x="670" y="112" width="190" height="40" rx="4"/>
+        <text class="tl" x="682" y="130">SX1262 LoRa</text><text class="sb" x="682" y="145">865&ndash;867 MHz beacon</text>
+        <path class="bus" d="M574 132 H666"/><text class="buslab" x="620" y="127">SPI2</text>
+
+        <rect class="blk" x="670" y="162" width="190" height="40" rx="4"/>
+        <text class="tl" x="682" y="180">microSD + RTC</text><text class="sb" x="682" y="195">archive · PCF8563</text>
+        <path class="bus" d="M574 182 H666"/><text class="buslab" x="620" y="177">SPI3</text>
+
+        <rect class="blk" x="670" y="212" width="190" height="40" rx="4"/>
+        <text class="tl" x="682" y="230">OLED 1.3"</text><text class="sb" x="682" y="245">field status</text>
+        <path class="bus" d="M574 232 H666"/><text class="buslab" x="620" y="227">I²C</text>
+
+        <rect class="blk p" x="670" y="262" width="190" height="40" rx="4"/>
+        <text class="tl" x="682" y="280">AXP2101 PMU</text><text class="sb" x="682" y="295">coulomb counter</text>
+        <path class="bus" d="M574 282 H666"/><text class="buslab" x="620" y="277">I²C</text>
+
+        <rect class="blk p" x="330" y="340" width="240" height="44" rx="4"/>
+        <text class="tl" x="450" y="358" text-anchor="middle">Rails</text>
+        <text class="sb" x="450" y="374" text-anchor="middle">3V3 main · GNSS backup always-on</text>
+        <path class="bus" d="M450 300 V336"/>
+
+        <rect class="blk p" x="40" y="342" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="360">18650 + solar</text><text class="sb" x="52" y="375">onboard holder · 6 V 1 W</text>
+        <path class="bus" d="M230 362 H326"/>
+
+        <rect class="blk" x="670" y="342" width="190" height="40" rx="4"/>
+        <text class="tl" x="682" y="360">USB-C</text><text class="sb" x="682" y="375">CDC serial · CLI link</text>
+        <path class="bus" d="M574 362 H666"/>
+      </svg>
+    </div>
+    <p class="legend"><i class="lg-t"></i>sensing <i class="lg-r"></i>radio <i class="lg-p"></i>power <i style="background:var(--card);border-color:var(--ink)"></i>other</p>
+
+    <h3>Bus allocation</h3>
+    <p>The two SPI peripherals must be on separate buses. Sharing SPI between the LoRa radio and the SD card is possible but creates a contention bug that only appears when a beacon fires mid-write, which is exactly the situation you can't reproduce on a bench.</p>
+    <div class="tw"><table>
+      <thead><tr><th class="m">Bus</th><th>Devices</th><th class="m">Rate</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="m">I²C0</td><td>AXP2101, QMI8658, QMC6310, BME280, PCF8563, OLED</td><td class="m">400 kHz</td><td>Six devices on one bus. Distinct addresses, but keep the bus short and probe each at boot.</td></tr>
+        <tr><td class="m">UART1</td><td>L76K GNSS</td><td class="m">9600 → 115200</td><td>Raise the baud in firmware init for faster fix data</td></tr>
+        <tr><td class="m">SPI2</td><td>SX1262</td><td class="m">8 MHz</td><td>Dedicated. DIO1 as IRQ, BUSY line respected</td></tr>
+        <tr><td class="m">SPI3</td><td>microSD</td><td class="m">20 MHz</td><td>Dedicated. Mount lazily, unmount before sleep.</td></tr>
+        <tr><td class="m">GPIO</td><td>1PPS, IMU INT, reed switch</td><td class="m">—</td><td>All RTC-capable pins so they can wake deep sleep</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Additions beyond the stock board</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Part</th><th class="m">Approx</th><th>Why it earns its place</th></tr></thead>
+      <tbody>
+        <tr><td>Active GNSS antenna, u.FL</td><td class="m">₹300</td><td>Biggest single improvement to fix quality and time-to-first-fix. Do this before any filtering work.</td></tr>
+        <tr><td><b>Band-matched whip, SMA</b></td><td class="m">₹200</td><td>Must match the silkscreen marking beside the SMA. A 433 whip on an 868 radio gives dreadful SWR and slowly cooks the PA. Never power the SX1262 with no antenna at all.</td></tr>
+        <tr><td>IP65 enclosure + gland</td><td class="m">₹400</td><td>Needs an RF-transparent lid. Metal boxes make excellent Faraday cages and useless trackers.</td></tr>
+        <tr><td>Reed switch + magnet</td><td class="m">₹60</td><td>Case-open detection with zero standby current.</td></tr>
+        <tr><td>6 V 1 W solar panel</td><td class="m">₹350</td><td>Into the AXP2101 charge input. Turns weeks of runtime into indefinite for outdoor placement.</td></tr>
+        <tr><td>Flat-top 18650, 3500 mAh</td><td class="m">₹600</td><td>The onboard holder is built to the original 18650 spec — protected and button-top cells are often 70 mm and will not fit. Buy a known brand flat-top.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note ok"><b>Regulatory note — 868 is the right band here.</b> 865–867 MHz is the delicensed ISM allocation in India for low-power devices and is the standard Meshtastic <code>IN</code> region, so an 868/915 module is more appropriate than a 433 one, not less. Centre the beacon inside 865–867 rather than using the full EU 868 range. Design to a 1% hourly duty cycle even though the Indian rules are framed differently — it is good radio manners, good for battery, and matches what the ecosystem expects.</div>
+  </div>
+</section>
+
+<!-- ============ 03 POWER ============ -->
+<section id="power">
+  <div class="rail"><span class="no">03</span>Power<p>Runtime is a firmware feature, not a battery specification.</p></div>
+  <div class="body">
+    <h2>Power budget</h2>
+    <p>Work the arithmetic before writing the sleep code, because it tells you which optimisation actually matters. Measured at the battery, 3.7 V nominal.</p>
+    <div class="tw"><table>
+      <thead><tr><th>State</th><th class="m">Current</th><th class="m">Duration</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Deep sleep, GNSS backup only</td><td class="m">~45 µA</td><td class="m">idle</td><td>RTC domain plus GNSS backup rail. Dominated by the PMU quiescent draw.</td></tr>
+        <tr><td>Wake, GNSS warm fix</td><td class="m">~38 mA</td><td class="m">3–6 s</td><td>Warm start only if the backup rail stayed powered. Cold start is 30 s+ and ruins the budget.</td></tr>
+        <tr><td>Write record to flash</td><td class="m">~22 mA</td><td class="m">~20 ms</td><td>Negligible. Do not optimise this.</td></tr>
+        <tr><td>BLE advertising, 1 s interval</td><td class="m">~1.2 mA avg</td><td class="m">continuous</td><td>Only advertise when recently moved or on button press.</td></tr>
+        <tr><td>BLE connected, syncing</td><td class="m">~55 mA</td><td class="m">~30 s/day</td><td>Fast sync is a power optimisation, not just a UX one.</td></tr><tr><td><b>WiFi SoftAP, 3 clients idle</b></td><td class="m">~95 mA</td><td class="m">on demand</td><td>The dominant term whenever it is up. Never the default state.</td></tr><tr><td>WiFi SoftAP, serving bulk</td><td class="m">~180 mA</td><td class="m">seconds</td><td>Expensive per second, cheap per byte — the opposite of LoRa.</td></tr>
+        <tr><td>LoRa TX @866 MHz, SF10, 17 dBm</td><td class="m">~110 mA</td><td class="m">~370 ms</td><td>Roughly 11 µAh per beacon. A 1% duty cycle allows ~97 per hour — far more than the 5-minute alert interval needs.</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Scenarios</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Profile</th><th class="m">Daily draw</th><th class="m">3500 mAh</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td>Parked, no motion, no beacon</td><td class="m">~1.1 mAh</td><td class="m">years (self-discharge bound)</td><td>Asset sitting in a garage</td></tr>
+        <tr><td>Idle node, BLE presence only</td><td class="m">~52 mAh</td><td class="m">~65 days</td><td>In a bag, nobody looking at it</td></tr>
+        <tr><td>Continuous 10 s logging</td><td class="m">~190 mAh</td><td class="m">~18 days</td><td>Hiking, detailed trace</td></tr>
+        <tr><td><b>Active day: 3 clients, AP up 2 h</b></td><td class="m">~450 mAh</td><td class="m">~7 days</td><td>Realistic trek or site day — the profile that matters</td></tr><tr><td>AP left up permanently</td><td class="m">~2 300 mAh</td><td class="m">~1.5 days</td><td>The failure mode. Enforce the idle timeout in firmware.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note ok"><b>The dominant term is time-to-fix, not sleep current.</b> Halving your sleep current buys days; halving your fix time buys weeks. That means the GNSS backup rail and the antenna are your real power features — and the AXP2101's coulomb counter lets you verify all of it empirically instead of guessing.</div>
+  </div>
+</section>
+
+<!-- ============ 04 FIRMWARE ============ -->
+<section id="firmware">
+  <div class="rail"><span class="no">04</span>Firmware<p>ESP-IDF with FreeRTOS. Arduino works but hides the sleep and power APIs you need.</p></div>
+  <div class="body">
+    <h2>Firmware architecture</h2>
+    <h3>Toolchain</h3>
+    <p>ESP-IDF v5.x directly, with CMake and <code>idf.py</code> — not Arduino, and not PlatformIO. Arduino hides the sleep, power-management and NimBLE configuration you need, and PlatformIO&rsquo;s IDF support consistently lags the features that matter on the S3. Paying the CMake tax up front is cheaper than discovering the ceiling in month two.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Layer</th><th>Component</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>SDK</td><td>ESP-IDF v5.x</td><td>Pin the exact version in <code>idf_component.yml</code>. IDF minor releases move fast.</td></tr>
+        <tr><td>BLE</td><td>NimBLE bundled with IDF</td><td>Far smaller RAM footprint than Bluedroid, and it is the stack that supports several concurrent connections cleanly.</td></tr>
+        <tr><td>LoRa</td><td>RadioLib as an IDF component</td><td>Best SX1262 abstraction available. Respect the BUSY line and drive DIO1 as a real interrupt, not a poll.</td></tr>
+        <tr><td>HTTP + WS</td><td><code>esp_http_server</code></td><td>WebSocket support is built in. One handler, one socket per client.</td></tr>
+        <tr><td>Filesystem</td><td><code>esp_littlefs</code></td><td>Power-loss safe in a way SPIFFS is not. Worth it on a battery device.</td></tr>
+        <tr><td>SD</td><td><code>esp_vfs_fat</code> over SDSPI</td><td>Mount lazily; unmount before sleep or you will corrupt the card.</td></tr>
+        <tr><td>Tests</td><td>Unity on target + host build of pure logic</td><td>The scheduler and codec compile for the host with a stub HAL, so they test in CI without hardware.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>Partition layout, 8 MB</h4>
+<pre>nvs        , data, nvs    , 0x9000 , 0x6000    <i>// config, keys, cursors</i>
+otadata    , data, ota    , 0xf000 , 0x2000
+app0       , app , ota_0  , 0x10000, 0x280000   <i>// 2.5 MB</i>
+app1       , app , ota_1  ,        , 0x280000   <i>// OTA slot</i>
+storage    , data, littlefs,       , 0x2C0000   <i>// ~2.8 MB: logs + web assets</i></pre>
+    <p>Two OTA slots is not optional on a device several people depend on — a bad flash must roll back rather than brick.</p>
+
+    <h4>sdkconfig settings that actually matter</h4>
+<pre>CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3      <i>// default is 1; this is the multi-client switch</i>
+CONFIG_ESP_WIFI_SOFTAP_MAX_STA=4        <i>// 3 clients + headroom for a rejoin</i>
+CONFIG_SPIRAM_MODE_OCT=y                <i>// the S3 module is octal PSRAM</i>
+CONFIG_PM_ENABLE=y                      <i>// dynamic frequency scaling</i>
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     <i>// the single biggest idle-power win</i>
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y <i>// pairs with the two OTA slots</i>
+CONFIG_HTTPD_WS_SUPPORT=y</pre>
+
+    <h4>Debugging</h4>
+    <p>The ESP32-S3 has a <b>built-in USB-JTAG bridge</b> — no external probe, no wiring. Plug in the USB-C cable and you get real breakpoints, watchpoints and single-stepping through OpenOCD and GDB. This is the single most underused feature of the chip; most people <code>printf</code> their way through a project that has a working debugger sitting idle.</p>
+    <p>Alongside that: <code>esp_log</code> with per-tag levels so you can turn the scheduler chatty without drowning in WiFi logs, a task watchdog that names the offending task, and a crash handler that writes the backtrace to LittleFS so a field failure is still readable after a reboot. Decode addresses with <code>idf.py monitor</code>, which symbolicates automatically.</p>
+
+    <h3>Task decomposition</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Task</th><th class="m">Prio</th><th class="m">Core</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>gnss_task</td><td class="m">5</td><td class="m">0</td><td>UART reads, NMEA parse, emit <code>FixEvent</code> to the queue. Never touches storage.</td></tr>
+        <tr><td>policy_task</td><td class="m">6</td><td class="m">0</td><td>The brain. Consumes fixes plus IMU events <em>or</em> GNSS-speed motion; decides log, geofence, beacon, sleep.</td></tr>
+        <tr><td>storage_task</td><td class="m">4</td><td class="m">1</td><td>Sole owner of LittleFS and SD. Serialises all writes; nothing else opens a file.</td></tr>
+        <tr><td>ble_task</td><td class="m">4</td><td class="m">1</td><td>NimBLE host, GATT callbacks, chunk pump. Reads storage only via queue requests.</td></tr>
+        <tr><td>lora_task</td><td class="m">3</td><td class="m">1</td><td>Beacon TX, duty-cycle enforcement, DIO1 IRQ handling.</td></tr>
+        <tr><td>power_task</td><td class="m">2</td><td class="m">0</td><td>AXP2101 polling, coulomb accounting, low-battery policy, sleep entry.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><b>Single-owner rule.</b> Exactly one task may touch the filesystem. Every other task requests reads and writes through a queue. This eliminates the entire class of corruption bugs that appear when a BLE transfer and a log write race, and it makes the sleep path trivially safe — <code>storage_task</code> drains its queue, flushes, and only then signals ready-to-sleep.</div>
+
+    <h3>Degradation matrix</h3>
+    <p>You have all of these, but probe every I²C address at boot, log what answered, and branch anyway. LilyGO variants differ — the pressure sensor in particular is absent on some — and a sensor that fails in the field should shrink the feature set, not hang the device.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Missing part</th><th>What breaks</th><th>Fallback</th></tr></thead>
+      <tbody>
+        <tr><td>IMU</td><td>Motion gate, tamper free-fall detection</td><td>Gate on GNSS speed with a 5-minute still timeout. Costs roughly 3× the idle power, so treat an IMU failure as a battery alarm.</td></tr>
+        <tr><td>BME280</td><td>Barometric altitude, temperature</td><td><code>baro</code> and <code>tmp</code> write 0x8000. The app renders GNSS altitude only and stops offering altitude smoothing.</td></tr>
+        <tr><td>microSD</td><td>Cold archive beyond ~7 days</td><td>Internal LittleFS ring only. History shortens; sync urgency in the app increases. Everything else is identical.</td></tr>
+        <tr><td>PCF8563 RTC</td><td>Wall-clock time across a full power loss</td><td>Monotonic counter plus the <code>time_valid</code> flag — the app repairs the timeline. This path exists anyway for no-fix runs, so it is already tested. Discipline the RTC from GNSS on every fix.</td></tr>
+        <tr><td>OLED</td><td>Field status without a phone</td><td>Status over BLE only. Add a single status LED blink code for power-on confirmation.</td></tr>
+        <tr><td>Magnetometer</td><td>Heading when stationary</td><td>Course-over-ground from GNSS, which is meaningless below ~2 km/h. Report heading as unknown rather than noise.</td></tr>
+      </tbody>
+    </table></div>
+
+
+    <h3>Device state machine</h3>
+<pre><b>IDLE</b>        deep sleep, wake on IMU / timer / reed / button
+  │  motion detected
+  ▼
+<b>ACTIVE</b>      periodic fix, log, evaluate geofences
+  │  geofence exit or tamper       │  no motion for N min
+  ▼                                 ▼
+<b>ALERT</b>       beacon + fast fix    <b>IDLE</b>
+  │  acknowledged from app
+  ▼
+<b>ACTIVE</b>
+
+<i>orthogonal:</i>
+<b>SYNCING</b>     entered from any state when a central connects;
+            suspends sleep, does not suspend logging</pre>
+
+    <h3>Storage layers</h3>
+    <ul>
+      <li><b>NVS</b> — configuration, geofence blob, session keys, sync watermarks. Small, wear-levelled, survives OTA.</li>
+      <li><b>LittleFS on internal flash</b> — the hot ring buffer, roughly the last 7 days. Fast, no card required, survives a missing SD.</li>
+      <li><b>microSD</b> — cold archive. <code>storage_task</code> migrates sealed days from LittleFS to SD on a timer. With no card inserted the system runs unchanged on a shorter history.</li>
+    </ul>
+
+
+    <h4>Manifest</h4>
+    <p>One entry per file, rewritten atomically — write <code>manifest.tmp</code>, then rename. It is the only structure the device updates frequently, so keep it small.</p>
+<pre>struct manifest_entry {   <i>// 16 bytes, one per file</i>
+  <b>uint32_t</b> day;          <i>// YYYYMMDD as an integer</i>
+  <b>uint32_t</b> record_count; <i>// device-authoritative</i>
+  <b>uint32_t</b> synced_upto;  <i>// last offset the phone acknowledged</i>
+  <b>uint32_t</b> reserved;
+};</pre>
+    <p>When free space drops below ~15%, delete the oldest file where <code>synced_upto == record_count</code>. If nothing qualifies, delete the oldest anyway and set a <code>data_lost</code> flag the app surfaces. Silent data loss is worse than a warning.</p>
+    <div class="note ok"><b>The ownership rule.</b> The device is authoritative about <em>what exists</em> — which files, how many records. The phone is authoritative about <em>what it has received</em> — the synced offset. Neither ever infers the other’s state; it asks. Almost every duplicate-point and lost-point bug in this class of system comes from violating this one rule.</div>
+
+    <h3>Geofence evaluation</h3>
+<pre><i>// compiled form, pushed from the app, stored in NVS</i>
+struct zone {
+  <b>uint16_t</b> id;
+  <b>int32_t</b>  min_lat, min_lon, max_lat, max_lon;  <i>// bbox prefilter</i>
+  <b>uint16_t</b> vertex_count;
+  <b>int32_t</b>  vertices[];                          <i>// e7 fixed point</i>
+};
+
+<i>// per fix: bbox reject is ~20 cycles, polygon test only on survivors</i>
+<u>if</u> (!in_bbox(fix, z)) <u>continue</u>;
+state = point_in_polygon(fix, z) ? INSIDE : OUTSIDE;
+<u>if</u> (state != z.last_state && ++z.streak >= 3 && dist_to_edge > 30_m)
+    emit_geofence_event(z.id, state);</pre>
+    <p>The streak counter plus the 30 m dead band is what stops a stationary device parked on a boundary from generating a hundred events overnight. Get this wrong and the feature is worse than useless.</p>
+  </div>
+</section>
+
+<!-- ============ 05 PROTOCOL ============ -->
+<section id="protocol">
+  <div class="rail"><span class="no">05</span>Protocol<p>Define this first, in writing, before either side is built.</p></div>
+  <div class="body">
+    <h2>Wire formats</h2>
+
+    <h3>Track record — 32 bytes</h3>
+    <div class="bytemap">
+      <div class="bmgrid">
+        <div class="f a" style="grid-column:span 4">epoch<span>u32</span></div>
+        <div class="f b" style="grid-column:span 4">lat_e7<span>i32</span></div>
+        <div class="f b" style="grid-column:span 4">lon_e7<span>i32</span></div>
+        <div class="f c" style="grid-column:span 2">alt<span>i16</span></div>
+        <div class="f c" style="grid-column:span 2">baro<span>i16</span></div>
+        <div class="f c" style="grid-column:span 2">spd<span>u16</span></div>
+        <div class="f c" style="grid-column:span 2">hdg<span>u16</span></div>
+        <div class="f c" style="grid-column:span 1">sv<span>u8</span></div>
+        <div class="f c" style="grid-column:span 1">hd<span>u8</span></div>
+        <div class="f c" style="grid-column:span 1">bat<span>u8</span></div>
+        <div class="f c" style="grid-column:span 1">tmp<span>i8</span></div>
+        <div class="f d" style="grid-column:span 4">flags<span>u32</span></div>
+        <div class="f e" style="grid-column:span 4">crc32<span>trailer</span></div>
+      </div>
+      <div class="ruler">
+        <i>0</i><i></i><i></i><i></i><i>4</i><i></i><i></i><i></i><i>8</i><i></i><i></i><i></i><i>12</i><i></i><i>14</i><i></i><i>16</i><i></i><i>18</i><i></i><i>20</i><i>21</i><i>22</i><i>23</i><i>24</i><i></i><i></i><i></i><i>28</i><i></i><i></i><i></i>
+      </div>
+    </div>
+    <p class="caption">little-endian · lat/lon ×10⁷ ≈ 1.1 cm · speed cm/s · heading centidegrees · fixed width so offset = index × 32 · <b>baro and tmp read 0x8000 when no BME280 is fitted — keep the fields, the layout must not change per build</b></p>
+
+    <h4>Flags word</h4>
+    <div class="tw"><table>
+      <thead><tr><th class="m">Bits</th><th>Field</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="m">0</td><td>time_valid</td><td>Clear when logged without a fix; the app must repair this timestamp.</td></tr>
+        <tr><td class="m">1</td><td>fix_3d</td><td>A 2D fix has fictional altitude — use the barometer instead.</td></tr>
+        <tr><td class="m">2</td><td>motion</td><td>IMU reported movement at sample time.</td></tr>
+        <tr><td class="m">3</td><td>trip_start</td><td>First point after wake. Segments trips with no heuristics.</td></tr>
+        <tr><td class="m">4</td><td>tamper</td><td>Case opened or free-fall detected since the last point.</td></tr>
+        <tr><td class="m">5</td><td>charging</td><td>From the PMU. Useful for correlating power anomalies.</td></tr>
+        <tr><td class="m">6–7</td><td>reserved</td><td>Leave zero, validate on read.</td></tr>
+        <tr><td class="m">8–15</td><td>zone_mask</td><td>Which of the first 8 geofences contained this point.</td></tr>
+        <tr><td class="m">16–31</td><td>seq_lo</td><td>Low 16 bits of a monotonic counter — detects gaps without full timestamps.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>GATT service</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Characteristic</th><th class="m">Props</th><th>Payload</th></tr></thead>
+      <tbody>
+        <tr><td>Status</td><td class="m">notify</td><td>16 B: fix state, sats, HDOP, battery mAh, record count, device state enum. 1 Hz while connected.</td></tr>
+        <tr><td>Config</td><td class="m">read / write</td><td>Whole-struct read-modify-write: intervals, thresholds, beacon policy, device name.</td></tr>
+        <tr><td>Control</td><td class="m">write</td><td><code>LIST</code>, <code>START(day,offset)</code>, <code>ACK(seq)</code>, <code>STOP</code>, <code>ERASE(day)</code>, <code>PUSH_ZONES</code>, <code>ACK_ALERT</code>, <code>OTA_BEGIN</code>.</td></tr>
+        <tr><td>Data</td><td class="m">notify</td><td>Chunk stream, framed below.</td></tr>
+        <tr><td>Events</td><td class="m">notify</td><td>Geofence and tamper events pushed immediately on connect if unacknowledged.</td></tr>
+      </tbody>
+    </table></div>
+<pre><u>+--------+--------+---------------------+---------+</u>
+| seq u16| len u16|    payload (N B)    |crc16 u16|
+<u>+--------+--------+---------------------+---------+</u>
+
+N = negotiated_mtu - 9        <i>// 508 at MTU 517</i>
+payload holds whole records only, never a split record
+crc16 CCITT over seq + len + payload</pre>
+
+    <h3>The sync handshake</h3>
+    <ol>
+      <li>Phone connects, negotiates the largest MTU it can get, subscribes to Status, Events and Data.</li>
+      <li>Phone writes <code>LIST</code>; device replies over Data with its manifest.</li>
+      <li>Phone compares against its own store and picks the first gap: <code>START(day, offset)</code>.</li>
+      <li>Device streams chunks on Data as fast as the connection interval allows.</li>
+      <li>Every 32 chunks the phone writes <code>ACK(last_good_seq)</code>; the device advances its window and continues.</li>
+      <li>On a CRC failure or a gap in <code>seq</code>, the phone stops acking and re-issues <code>START</code> from its last verified offset.</li>
+      <li>Transfer ends with a zero-length chunk. The phone commits, updates its store, and moves to the next gap.</li>
+    </ol>
+    <h4>Throughput you should expect</h4>
+    <div class="tw"><table>
+      <thead><tr><th>Parameter</th><th class="m">Default</th><th class="m">Tuned</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr><td>PHY</td><td class="m">1M</td><td class="m">2M</td><td>The S25 supports 2M properly; roughly doubles the rate</td></tr>
+        <tr><td>MTU</td><td class="m">23 B</td><td class="m">517 B</td><td>508 B payload = 15 records per chunk at 32 B each</td></tr>
+        <tr><td>Connection interval</td><td class="m">~45 ms</td><td class="m">15 ms</td><td>Set by <code>CONNECTION_PRIORITY_HIGH</code></td></tr>
+        <tr><td>Realistic rate</td><td class="m">5–8 KB/s</td><td class="m">15–25 KB/s</td><td>A 275 KB day syncs in ~15 s instead of ~45 s</td></tr>
+      </tbody>
+    </table></div>
+    <p>Understanding precisely why that number is what it is — connection interval, packets per connection event, ATT overhead, phone-side scheduling — is the most transferable thing in the whole project. Put the measured value on the Diagnostics screen so a regression is visible immediately.</p>
+
+    <h3>Transports: pick per job, not per project</h3>
+    <p>Three radios are already on the board and they are good at different things. Using one for everything is the mistake.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Transport</th><th class="m">Throughput</th><th class="m">Node draw</th><th class="m">Range</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td><b>BLE</b></td><td class="m">15–25 KB/s</td><td class="m">~2 mA avg</td><td class="m">~20 m</td><td>Always-on presence, status, alerts, background sync. The idle state.</td></tr>
+        <tr><td><b>WiFi SoftAP</b></td><td class="m">2–8 Mbit/s</td><td class="m">~100 mA</td><td class="m">~30 m</td><td>Brought up on demand. Bulk history, map tiles, serving the web client, several phones at once.</td></tr>
+        <tr><td><b>LoRa</b></td><td class="m">~1 kbit/s</td><td class="m">110 mA in TX</td><td class="m">km</td><td>The link out. Positions and short messages only, duty-cycle bound.</td></tr>
+      </tbody>
+    </table></div>
+    <p>The AP is the expensive one — roughly fifty times BLE’s idle draw — so it must not be the default state. Bring it up on a button press, on a BLE command from a client, or on first LoRa alert, and drop it after a few minutes of no HTTP activity. That single rule is the difference between a device that lasts a weekend and one that lasts an afternoon.</p>
+    <div class="note bad"><b>What the AP costs you beyond power.</b> Android flags a network with no internet route and may quietly fall back to mobile data mid-session — handle the disconnect rather than assuming it stays. There is no background operation: close the browser tab and the client is gone, which is precisely why BLE stays up underneath. And a captive-portal redirect helps discovery but behaves differently on every Android version, so treat it as a convenience, never as the path.</div>
+
+    <h3>Multi-client arbitration</h3>
+    <p>This is the part that does not exist in a one-phone design, and it is where the real engineering lives. One radio, three clients, all wanting to talk.</p>
+    <h4>Airtime scheduling</h4>
+    <p>LoRa is the scarce resource. Three phones each queue a message against a link with a 1% duty-cycle budget, so the node needs a real scheduler rather than a queue:</p>
+<pre><b>Priority lanes</b>   0 emergency  → pre-empts everything, ignores fairness
+                  1 position   → aggregated, decimated, one packet per window
+                  2 message    → deficit round-robin across clients
+                  3 bulk       → only when the budget is otherwise idle
+
+<b>Per-client budget</b>  each client gets 1/N of the remaining airtime after
+                  lane 0 and 1; unused allocation decays rather than banks
+                  so an absent client cannot hoard and then flood
+
+<b>Admission</b>        reject at enqueue with a reason the client can render,
+                  never silently drop — the user must see "queued, 40 s"</pre>
+    <p>Deficit round-robin is the right primitive: each client accumulates credit in airtime milliseconds, spends it to transmit, and a chatty user cannot starve a quiet one. Roughly 200 lines of firmware, and a genuine distributed-systems problem.</p>
+    <h4>Shared state, several readers</h4>
+    <p>Every client needs the same message history and position set, but they attach and detach at different times. The node is the single authority; each client holds a cursor and pulls deltas from it.</p>
+<pre><b>struct</b> client {
+  <b>uint8_t</b>  id;            <i>// 0..2, assigned at pairing</i>
+  <b>uint32_t</b> msg_cursor;    <i>// last message seq delivered</i>
+  <b>uint32_t</b> pos_cursor;    <i>// last position seq delivered</i>
+  <b>uint32_t</b> airtime_credit;<i>// deficit round-robin, in ms</i>
+  <b>uint8_t</b>  key[32];       <i>// per-client, from pairing ECDH</i>
+  transport_t active;      <i>// BLE | WIFI | NONE</i>
+};</pre>
+    <p>A client returning after an hour needs 200 messages, and must not block the two that are live. Serve backlog in bounded chunks interleaved with live traffic — the same fairness idea one layer up.</p>
+    <h4>Backpressure</h4>
+    <p>Three phones streaming position at 1 Hz will saturate the LoRa link instantly. The node aggregates them into one packet per window, decimates by distance rather than time, and drops points that add no information. It needs a policy about what matters, not just a pipe.</p>
+    <h4>Degradation</h4>
+    <p>A fourth phone tries to join: refuse with a clear reason, do not queue silently. Battery hits 15% with three people depending on the node: drop the AP, keep BLE and LoRa, tell everyone why. These are product decisions a single-user device never faces, and they are worth designing rather than discovering.</p>
+
+
+
+    <h3>LoRa beacon — 18 bytes @ 866 MHz</h3>
+    <p>Deliberately tiny. At SF10/125 kHz on 866 MHz this is roughly 370 ms of airtime, so a 1% duty cycle budget leaves enormous headroom. AES-CCM encrypted with a pre-shared key so a passive listener learns nothing. Enforce the duty-cycle ceiling in <code>lora_task</code> as a hard limit, not a policy — a bug should not be able to turn your tracker into a jammer.</p>
+<pre>device_id  u16     lat_e7  i32     lon_e7  i32
+epoch      u32     flags   u16     battery u8   hdop u8
+<i>// then 4-byte CCM tag, transmitted as 22 bytes on air</i></pre>
+    <div class="note"><b>Version everything.</b> Byte 0 of every log file and every BLE session carries a protocol version. You will change the record layout, and a phone holding six months of history needs to know which parser applies.</div>
+  </div>
+</section>
+
+<!-- ============ 06 SOFTWARE ============ -->
+<section id="software">
+  <div class="rail"><span class="no">06</span>Software<p>The CLI requirement is what forces this shape, and the shape is better anyway.</p></div>
+  <div class="body">
+    <h2>Module architecture</h2>
+    <p>The protocol lives in a Kotlin Multiplatform module with no Android, no coroutines, no IO. Three consumers depend on it and none of them can drift from each other.</p>
+<pre>tracker/
+├── core/
+│   ├── <b>protocol</b>/       <i>KMP · commonMain only · zero deps</i>
+│   │     FrameCodec, TransferMachine, ZoneCompiler,
+│   │     TrackPoint, Command, golden test vectors
+│   ├── <b>data</b>/           <i>Android · Room, repositories, GPX/KML export</i>
+│   └── <b>ble</b>/            <i>Android · GATT transport implementing Transport</i>
+├── <b>app</b>/                <i>Android · Compose UI, MVI, MapLibre</i>
+├── <b>cli</b>/                <i>JVM · Clikt + jSerialComm, same protocol module</i>
+└── <b>firmware</b>/           <i>ESP-IDF · conforms to the same spec</i></pre>
+
+    <h3>The transport abstraction</h3>
+    <p>One interface, three implementations. This is what makes the CLI a few days of work rather than a rewrite.</p>
+<pre><b>interface</b> Transport {
+    <b>val</b> incoming: Flow&lt;ByteArray&gt;
+    <b>suspend fun</b> send(bytes: ByteArray)
+    <b>val</b> maxPayload: Int
+}
+
+<i>// BleTransport      — GATT notify / write, maxPayload = mtu - 9</i>
+<i>// SerialTransport   — USB CDC framing, maxPayload = 4096</i>
+<i>// ReplayTransport   — reads a captured session, for tests and demos</i></pre>
+
+    <h3>Three languages, one wire format</h3>
+    <p>The web client is TypeScript, the firmware is C, the CLI and native app are Kotlin. Hand-writing the codec three times guarantees drift, and the drift will surface as a bug you cannot reproduce on either side alone. So generate it.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Message class</th><th>Format</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Track records</td><td>Fixed-width struct, generated from one schema</td><td>32 bytes, offset = index &times; 32. Protobuf would cost 40% more bytes and destroy random access.</td></tr>
+        <tr><td>Control, config, chat</td><td>Protobuf via nanopb / protobuf-ts / protobuf-kotlin</td><td>Schema evolution matters here and the volume is low. Meshtastic uses protobufs for exactly this reason.</td></tr>
+        <tr><td>LoRa beacon</td><td>Hand-packed 18 bytes</td><td>Every byte is airtime. This one earns its hand-rolling.</td></tr>
+      </tbody>
+    </table></div>
+<pre>schema/
+  records.yaml      <i>// field name, type, scale, unit</i>
+  control.proto
+  gen.py            <i>// emits all three targets from records.yaml</i>
+    → firmware/gen/records.h        (packed structs + static_asserts on size)
+    → web/src/gen/records.ts        (DataView reader/writer)
+    → shared/gen/Records.kt         (ByteBuffer reader/writer)</pre>
+    <div class="note ok"><b>Generate the golden vectors too.</b> The same script emits a hex fixture file that all three implementations decode in their own test suite. If C, TypeScript and Kotlin all agree on the same 40 bytes, the wire format is genuinely one thing rather than three hopeful ones.</div>
+
+    <h3>Pure state machine</h3>
+    <p>No suspension, no IO, no BLE. Takes an event, returns the next state and a list of actions for the caller to perform. Every resume edge case becomes a plain JVM unit test.</p>
+<pre><b>class</b> TransferMachine(<b>private val</b> file: FileId, <b>private val</b> from: Long) {
+    <b>fun</b> step(e: TransferEvent): Pair&lt;TransferMachine, List&lt;TransferAction&gt;&gt;
+}
+
+<b>sealed interface</b> TransferEvent {
+    <b>data class</b> ChunkReceived(<b>val</b> chunk: Chunk) : TransferEvent
+    <b>data object</b> Disconnected                      : TransferEvent
+    <b>data class</b> CrcFailed(<b>val</b> seq: UShort)         : TransferEvent
+    <b>data object</b> AckWindowElapsed                  : TransferEvent
+}
+
+<b>sealed interface</b> TransferAction {
+    <b>data class</b> Send(<b>val</b> cmd: Command)                 : TransferAction
+    <b>data class</b> Commit(<b>val</b> points: List&lt;TrackPoint&gt;)   : TransferAction
+    <b>data class</b> Progress(<b>val</b> done: Int, <b>val</b> total: Int) : TransferAction
+    <b>data class</b> Fail(<b>val</b> reason: SyncError)            : TransferAction
+}</pre>
+  </div>
+</section>
+
+<!-- ============ 07 WIREFRAMES ============ -->
+<section id="wireframes">
+  <div class="rail"><span class="no">07</span>Wireframes<p>Six screens, one bottom navigation bar. Anything that doesn't fit here doesn't ship in v1.</p></div>
+  <div class="body">
+    <h2>App wireframes</h2>
+    <div class="screens">
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>3 clients</span></div>
+        <div class="appbar"><b>Live</b><span class="pill ok">wifi</span></div>
+        <div class="scr">
+          <div class="row"><span>fix</span><b>3D &middot; 11 sv</b></div>
+          <div class="big">22.71962 N<br>75.85773 E</div>
+          <div class="row"><span>accuracy</span><span>&plusmn; 4 m (hdop 0.9)</span></div>
+          <div class="row"><span>altitude</span><span>553 m &middot; baro 549</span></div>
+          <div class="lbl">people</div>
+          <div class="row"><span>you (asha)</span><span class="pill ok">here</span></div>
+          <div class="row"><span>ravi</span><span>420 m NE &middot; 2 min</span></div>
+          <div class="row"><span>meera</span><span class="pill w">seen 18 min ago</span></div>
+          <div class="lbl">node</div>
+          <div class="row"><span>battery</span><span>2 730 mAh &middot; 78%</span></div>
+          <div class="row"><span>runtime</span><span>6 h at this rate</span></div>
+          <div class="btn p">Send position to all</div>
+        </div>
+        <div class="tabs"><div class="on">Live</div><div>Map</div><div>Chat</div><div>Clients</div><div>Config</div></div>
+      </div>
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>3 clients</span></div>
+        <div class="appbar"><b>Map</b><span>offline tiles</span></div>
+        <div class="scr">
+          <div class="maparea">
+            <svg viewBox="0 0 200 112" preserveAspectRatio="none" aria-hidden="true">
+              <ellipse cx="70" cy="62" rx="16" ry="12" fill="none" stroke="var(--sig)" stroke-width="1" stroke-dasharray="3 2"/>
+              <path d="M24,96 L48,80 L64,84 L88,58 L120,48 L150,26" fill="none" stroke="var(--sig)" stroke-width="2"/>
+              <path d="M150,26 L168,18" fill="none" stroke="var(--sig)" stroke-width="2" stroke-dasharray="4 3"/>
+              <circle cx="70" cy="62" r="4" fill="var(--lock)"/>
+              <circle cx="150" cy="26" r="4" fill="var(--sig)"/>
+              <circle cx="118" cy="92" r="4" fill="var(--lora)"/>
+            </svg>
+          </div>
+          <div class="row"><span class="pill ok">asha</span><span>here</span></div>
+          <div class="row"><span class="pill n">ravi</span><span>420 m &middot; 2 min old</span></div>
+          <div class="row"><span class="pill l">meera</span><span>1.2 km &middot; 18 min old</span></div>
+          <div class="lbl">rendering</div>
+          <div class="row"><span>ellipse</span><span>gnss uncertainty</span></div>
+          <div class="row"><span>dashed</span><span>interpolated, not observed</span></div>
+          <div class="btn">Export GPX</div>
+        </div>
+        <div class="tabs"><div>Live</div><div class="on">Map</div><div>Chat</div><div>Clients</div><div>Config</div></div>
+      </div>
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>3 clients</span></div>
+        <div class="appbar"><b>Chat</b><span>lane 2</span></div>
+        <div class="scr">
+          <div class="card"><b>ravi &middot; 09:14</b><span>reached the ridge, taking the north path</span></div>
+          <div class="card sel"><b>you &middot; 09:16</b><span>copy, we are 20 min behind</span></div>
+          <div class="card"><b>meera &middot; 09:31</b><span>water source dry, carry extra</span></div>
+          <div class="lbl">outbound queue</div>
+          <div class="row"><span>your message</span><span class="pill n">queued 40 s</span></div>
+          <div class="row"><span>ahead of you</span><span>ravi &times;1</span></div>
+          <div class="row"><span>airtime credit</span><span>340 / 1000 ms</span></div>
+          <div class="lbl">compose</div>
+          <div class="card"><span>type a message&hellip; 67 chars left</span></div>
+          <div class="btn p">Send</div>
+          <div class="btn">Send as emergency (lane 0)</div>
+        </div>
+        <div class="tabs"><div>Live</div><div>Map</div><div class="on">Chat</div><div>Clients</div><div>Config</div></div>
+      </div>
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>3 clients</span></div>
+        <div class="appbar"><b>Clients</b><span>3 of 3</span></div>
+        <div class="scr">
+          <div class="card sel"><b>asha &middot; this device</b><span>wifi &middot; 4.2 Mbit/s &middot; since 09:02</span></div>
+          <div class="card"><b>ravi</b><span>ble &middot; presence only &middot; since 08:40</span></div>
+          <div class="card"><b>meera</b><span>ble &middot; out of range 18 min</span></div>
+          <div class="lbl">airtime, last hour</div>
+          <div class="row"><span>asha</span><span>31%</span></div>
+          <div class="bar"><i style="width:31%"></i></div>
+          <div class="row"><span>ravi</span><span>44%</span></div>
+          <div class="bar"><i style="width:44%"></i></div>
+          <div class="row"><span>meera</span><span>9%</span></div>
+          <div class="bar"><i style="width:9%"></i></div>
+          <div class="row"><span>duty cycle used</span><span>0.61% of 1%</span></div>
+          <div class="btn">Pair a new device</div>
+        </div>
+        <div class="tabs"><div>Live</div><div>Map</div><div>Chat</div><div class="on">Clients</div><div>Config</div></div>
+      </div>
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>3 clients</span></div>
+        <div class="appbar"><b>Config</b><span>admin only</span></div>
+        <div class="scr">
+          <div class="lbl">radios</div>
+          <div class="row"><span>wifi ap</span><span class="pill ok">up &middot; 12 min</span></div>
+          <div class="row"><span>ap idle timeout</span><b>5 min</b></div>
+          <div class="row"><span>ble presence</span><span class="pill ok">always</span></div>
+          <div class="row"><span>lora duty ceiling</span><b>1.0%</b></div>
+          <div class="lbl">position sharing</div>
+          <div class="row"><span>interval, moving</span><b>60 s</b></div>
+          <div class="row"><span>interval, still</span><b>10 min</b></div>
+          <div class="row"><span>decimate by</span><b>50 m</b></div>
+          <div class="lbl">policy</div>
+          <div class="row"><span>max clients</span><b>3</b></div>
+          <div class="row"><span>low battery</span><b>drop AP at 15%</b></div>
+          <div class="btn p">Apply to node</div>
+        </div>
+        <div class="tabs"><div>Live</div><div>Map</div><div>Chat</div><div>Clients</div><div class="on">Config</div></div>
+      </div>
+
+      <div class="dev">
+        <div class="sysbar"><span>node.local</span><span>diagnostics</span></div>
+        <div class="appbar"><b>Diagnostics</b><span>hidden</span></div>
+        <div class="scr">
+          <div class="lbl">transports</div>
+          <div class="row"><span>wifi</span><span>4.2 Mbit/s &middot; 3 sta</span></div>
+          <div class="row"><span>ble</span><span>2M phy &middot; 2 conn</span></div>
+          <div class="row"><span>lora</span><span>sf10 &middot; rssi &minus;102</span></div>
+          <div class="lbl">scheduler</div>
+          <div class="row"><span>lane 0/1/2/3</span><span>0 / 41 / 12 / 3</span></div>
+          <div class="row"><span>admissions refused</span><span>2</span></div>
+          <div class="row"><span>backlog served</span><span>204 msg</span></div>
+          <div class="lbl">node log</div>
+          <div class="row"><span>09:02:11</span><span>ap up, reason button</span></div>
+          <div class="row"><span>09:14:06</span><span>lane 1 aggregate &times;3</span></div>
+          <div class="row"><span>09:31:40</span><span class="pill w">meera ble timeout</span></div>
+          <div class="btn">Capture session to file</div>
+        </div>
+        <div class="tabs"><div>Live</div><div>Map</div><div>Chat</div><div>Clients</div><div>Config</div></div>
+      </div>
+
+    </div>
+
+    <h3>Navigation and copy rules</h3>
+    <ul>
+      <li>Five tabs, flat. Diagnostics is reached by long-pressing the app bar title, not by a sixth tab — it's for you, not for a user.</li>
+      <li>This is a web client served from the node, so it renders identically on any phone that joins the AP. No install, no store, no per-platform build.</li>
+      <li><b>Every position carries its uncertainty.</b> Error ellipses sized from HDOP, interpolated segments dashed, stale positions labelled with their age. Never a crisp dot implying precision the GNSS did not deliver.</li>
+      <li>Queue state is visible. &ldquo;Queued 40 s, ravi ahead of you&rdquo; is honest and calming; a spinner is neither.</li>
+      <li>Every failure state names the failure and offers the next action. <em>Retry from last good point</em>, never a red triangle.</li>
+      <li>Config changes are staged locally and written explicitly. A tracker that silently reconfigures itself mid-edit is a tracker you can't trust.</li>
+      <li>Empty states are invitations. An empty Map says <em>No trips recorded yet</em> with a Sync action, not "No data".</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 08 ANDROID ============ -->
+<section id="android">
+  <div class="rail"><span class="no">08</span>Clients<p>Web first. A native app only where the browser genuinely cannot go.</p></div>
+  <div class="body">
+    <h2>Clients</h2>
+    <h3>The web client is the product</h3>
+    <p>A PWA served from LittleFS over the SoftAP removes the single biggest adoption barrier this class of device has: nobody installs anything. Three people join the AP, open a browser, and they are in. It also collapses your client work from N platform builds to one.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Concern</th><th>Choice</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>Serving</td><td><code>esp_http_server</code> + gzipped assets in LittleFS</td><td>A whole app in ~300 KB. Precompress at build time; the ESP32 must not gzip on the fly.</td></tr>
+        <tr><td>Live data</td><td>WebSocket per client</td><td>Bidirectional, low overhead, and the natural fit for the per-client cursor model.</td></tr>
+        <tr><td>Framework</td><td>Svelte or Preact, no build-time bloat</td><td>Bundle size is a hard constraint here in a way it never is on the web.</td></tr>
+        <tr><td>Maps</td><td>MapLibre GL JS + PMTiles on the SD card</td><td>The node serves its own tiles. Genuinely offline, no key, no quota.</td></tr>
+        <tr><td>Storage</td><td>IndexedDB per client</td><td>History survives a tab close, so a reconnect is a delta not a full resync.</td></tr>
+        <tr><td>Install</td><td>Web app manifest + service worker</td><td>&ldquo;Add to home screen&rdquo; gives an app icon with no store involved.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><b>Budget the bundle like firmware.</b> Every kilobyte is served over WiFi from a microcontroller to three clients at once. Target under 300 KB gzipped for the whole client including the map library. That constraint is a feature — it keeps the UI honest.</div>
+
+    <h4>Build and tooling</h4>
+    <div class="tw"><table>
+      <thead><tr><th>Concern</th><th>Choice</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Build</td><td>Vite + TypeScript</td><td>Emits hashed, precompressed <code>.gz</code> assets straight into the firmware&rsquo;s LittleFS image directory.</td></tr>
+        <tr><td>Framework</td><td>Svelte</td><td>No runtime shipped to the client. Preact is the fallback if you want React idioms; plain React is too heavy here.</td></tr>
+        <tr><td>Size guard</td><td><code>size-limit</code> in CI</td><td>Fails the build above 300 KB gzipped. Treat it like a firmware flash-size check, because that is what it is.</td></tr>
+        <tr><td>Map</td><td>MapLibre GL JS + <code>pmtiles</code> protocol</td><td>Range requests against a single <code>.pmtiles</code> file on the SD card. The node serves its own basemap.</td></tr>
+        <tr><td>Local store</td><td>IndexedDB via <code>idb</code></td><td>Holds the cursor and history so a reconnect is a delta, not a full resync.</td></tr>
+        <tr><td>Offline shell</td><td>Workbox service worker</td><td>App loads even when the node is asleep. &ldquo;Add to home screen&rdquo; gives an icon with no store.</td></tr>
+        <tr><td>Transport</td><td>Native <code>WebSocket</code> + reconnect with backoff</td><td>On reopen, send the stored cursor and resume. Never assume the socket survived.</td></tr>
+        <tr><td>Tests</td><td>Vitest for codec, Playwright against the mock node</td><td>Codec tests run the generated golden vectors, identical to the firmware suite.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><b>Build a mock node in Node.js on day one.</b> A ~200-line script that serves the same WebSocket protocol and replays a captured session. You then develop the entire web client with the hardware unplugged, iterate in milliseconds instead of a flash cycle, and get deterministic Playwright runs. It is the highest-leverage 200 lines in the project.</div>
+
+    <h3>When you still want a native Android client</h3>
+    <p>The browser cannot do background work. If you want the node to sync to a phone that is in a pocket with the screen off — the tracker use case rather than the group use case — that needs BLE and a native app. Build it second, sharing the same protocol module.</p>
+
+    <h3>Stack</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Concern</th><th>Choice</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>UI</td><td>Compose + Material 3</td><td>Adopts One UI dynamic colour cleanly on the S25.</td></tr>
+        <tr><td>Architecture</td><td>MVI, one <code>StateFlow</code> per screen</td><td>Protocol state is complex; one place for transitions is worth the boilerplate.</td></tr>
+        <tr><td>BLE</td><td>Nordic <code>kotlin-ble</code></td><td>The only wrapper that is idiomatic Kotlin rather than a callback adapter.</td></tr>
+        <tr><td>Persistence</td><td>Room, raw chunks in a separate table</td><td>Parser bugs get re-run against stored bytes instead of re-synced.</td></tr>
+        <tr><td>Maps</td><td>MapLibre GL Native + PMTiles</td><td>Genuinely offline, no key, no quota, vector tiles.</td></tr>
+        <tr><td>Background</td><td>WorkManager expedited + PendingIntent scan</td><td>Survives process death, no permanent foreground service.</td></tr>
+        <tr><td>DI</td><td>Hilt</td><td>Boring and correct.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Connection setup</h3>
+    <p>Three calls that account for most of your throughput. The S25 supports 2M PHY properly, which roughly doubles the default rate.</p>
+<pre>gatt.requestMtu(517)
+gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+gatt.setPreferredPhy(
+    BluetoothDevice.PHY_LE_2M_MASK,
+    BluetoothDevice.PHY_LE_2M_MASK,
+    BluetoothDevice.PHY_OPTION_NO_PREFERRED
+)</pre>
+    <p>Expect 15–25 KB/s on this hardware rather than the 5–8 KB/s you get at 1M PHY and default priority. Surface the measured number on the Diagnostics screen — it's the most satisfying figure in the project and it tells you instantly when something regressed.</p>
+
+    <h3>Opportunistic background sync</h3>
+    <p>The best trick available on Android: a scan registered with a <code>PendingIntent</code> survives your process being killed. Register a filter on your service UUID at low power; when the tracker comes into range the system wakes you, and you enqueue an expedited worker that connects and syncs.</p>
+<pre><b>val</b> filter = ScanFilter.Builder()
+    .setServiceUuid(ParcelUuid(TRACKER_SERVICE))
+    .build()
+
+<b>val</b> settings = ScanSettings.Builder()
+    .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+    .setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
+    .build()
+
+scanner.startScan(listOf(filter), settings, pendingIntentFor&lt;ScanReceiver&gt;())</pre>
+
+    <h3>Manifest essentials</h3>
+<pre>&lt;uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+    android:usesPermissionFlags="<u>neverForLocation</u>" /&gt;
+&lt;uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /&gt;
+&lt;uses-permission android:name="android.permission.POST_NOTIFICATIONS" /&gt;
+
+&lt;service android:name=".SyncService"
+    android:foregroundServiceType="<u>connectedDevice</u>" /&gt;</pre>
+    <p>The <code>neverForLocation</code> flag lets you skip location permission entirely — a far better first run. It's only honest if you never derive location from scan results, which you don't; position arrives over GATT after connecting.</p>
+
+    <div class="note bad"><b>One UI will kill your background sync.</b> Samsung's "Deep sleeping apps" list and Adaptive Battery are more aggressive than stock Android, and they fail silently. Check <code>isIgnoringBatteryOptimizations()</code> at first run and ship an onboarding screen that walks the user to Settings → Battery → Background usage limits. Every serious tracker app has this screen; yours needs one too.</div>
+
+    <h3>Timeline repair</h3>
+    <p>Records logged without a fix carry a monotonic counter instead of a real timestamp. On the phone, walk each run of invalid records and interpolate against the counter — not the record index, since intervals aren't uniform once motion gating is active. A run with no valid fix on both sides can't be repaired; mark those points approximate and render them dashed rather than dropping or inventing them.</p>
+  </div>
+</section>
+
+<!-- ============ 09 CLI ============ -->
+<section id="cli">
+  <div class="rail"><span class="no">09</span>CLI<p>Serial, not BLE. Desktop Bluetooth is a tar pit and adds nothing here.</p></div>
+  <div class="body">
+    <h2>Command line tool</h2>
+    <p>Kotlin/JVM, Clikt for parsing, <code>jSerialComm</code> for USB CDC, shipped as a fat jar or a GraalVM native image. It reuses <code>core:protocol</code> unchanged and supplies only a <code>SerialTransport</code> — around 200 lines of genuinely new code.</p>
+<pre>tracker devices                              <i># enumerate serial ports</i>
+tracker pull --since 2026-07-01 -o ./logs    <i># resumable bulk fetch</i>
+tracker watch                                <i># live status, tail -f style</i>
+tracker config get
+tracker config set interval=30s beacon=alert-only
+tracker zones push home.geojson              <i># compile + upload</i>
+tracker decode dump.bin --format gpx|csv|json
+tracker <u>replay</u> dump.bin --speed 60x         <i># impersonate a device</i>
+tracker bench --duration 60s                 <i># throughput and scheduler stats</i></pre>
+    <div class="note ok"><b>Build <code>replay</code> early, even before you need a CLI.</b> A command that impersonates the device over a loopback transport lets you develop and test the entire Android app against reproducible captured data with the hardware sitting in a drawer. It pays for itself in the first week.</div>
+  </div>
+</section>
+
+<!-- ============ 10 TESTING ============ -->
+<section id="testing">
+  <div class="rail"><span class="no">10</span>Testing<p>The protocol module is the only place where exhaustive testing is cheap. Use it.</p></div>
+  <div class="body">
+    <h2>Testing strategy</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Layer</th><th>Method</th><th>What it catches</th></tr></thead>
+      <tbody>
+        <tr><td>Codec</td><td>Golden vectors, checked in as hex, generated by firmware</td><td>Endianness, packing, silent format drift between device and app</td></tr>
+        <tr><td>State machine</td><td>Property tests with Kotest — random event sequences</td><td>Resume bugs, duplicate commits, lost chunks, stuck states</td></tr>
+        <tr><td>Zone compiler</td><td>Fuzz with degenerate polygons: self-intersecting, collinear, antimeridian</td><td>The crashes that only occur on a device in a field</td></tr>
+        <tr><td>Transport</td><td>Fault-injecting fake: drops, reorders, truncates, disconnects</td><td>Everything you cannot reproduce reliably with real radio</td></tr>
+        <tr><td>Integration</td><td><code>replay</code> against a captured multi-day session</td><td>Timeline repair, trip segmentation, UI under real data volume</td></tr>
+        <tr><td>Field</td><td>Deliberate abuse: walk out of range mid-sync, kill the app, toggle Bluetooth, pull the battery</td><td>The bugs that matter</td></tr>
+      </tbody>
+    </table></div>
+    <p>Adopt one discipline above all: <b>write the failing test before the happy path works</b>. Resume is the feature. If you build it after the fast path, you will build it around the fast path's assumptions and it will never be right.</p>
+  </div>
+</section>
+
+<!-- ============ 11 ROADMAP ============ -->
+<section id="roadmap">
+  <div class="rail"><span class="no">11</span>Roadmap<p>Each phase de-risks the next. Resist reordering.</p></div>
+  <div class="body">
+    <h2>Build order</h2>
+    <p>Reordered for a hobby build: the earliest possible moment where something visibly works, then depth afterwards. The original plan front-loaded a week of pure Kotlin with nothing to look at, which is exactly how a side project dies.</p>
+
+    <div class="phase"><div class="n">01</div><div>
+      <h4>Blink, then serve</h4>
+      <p>ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, SoftAP running, a static page served from LittleFS that your phone can load. Nothing else.</p>
+      <em>one evening · the whole toolchain proven, and the debugger set up before you need it</em>
+    </div></div>
+
+    <div class="phase"><div class="n">02</div><div>
+      <h4>One phone, live position</h4>
+      <p>NMEA parsed, pushed over a WebSocket, rendered on a MapLibre map with an accuracy ellipse. Hand-write the codec — no schema, no generation, no Kotlin. Just get the dot on the map.</p>
+      <em>one weekend · the first moment that feels like something</em>
+    </div></div>
+
+    <div class="phase"><div class="n">03</div><div>
+      <h4>Three phones, shared state</h4>
+      <p>Per-client cursors, message history, chat, everyone seeing everyone. This is the local island and it is a <b>complete project</b> — if you stop here you have built something real and learned the multi-client model.</p>
+      <em>two weekends · <b>natural stopping point</b></em>
+    </div></div>
+
+    <div class="phase"><div class="n">04</div><div>
+      <h4>Make it fight</h4>
+      <p>Now the interesting part. Deficit round-robin scheduling, priority lanes, admission control, backlog interleaving. Test it by writing a client that deliberately floods. This is the phase with the most transferable engineering in it.</p>
+      <em>two weekends · the reason to build this at all</em>
+    </div></div>
+
+    <div class="phase"><div class="n">05</div><div>
+      <h4>Fix the drift</h4>
+      <p>By now the hand-written codec has bitten you at least once. <em>That</em> is when you introduce the schema and generate C and TypeScript from it, with shared golden vectors — because you will understand why it exists rather than taking my word for it.</p>
+      <em>one weekend · introduced when the pain is real, not before</em>
+    </div></div>
+
+    <div class="phase"><div class="n">06</div><div>
+      <h4>Optional: the link out</h4>
+      <p>LoRa underneath the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only worth doing if you have somewhere to take it where WiFi range genuinely runs out.</p>
+      <em>open-ended · optional by design</em>
+    </div></div>
+
+    <div class="phase"><div class="n">07</div><div>
+      <h4>Optional: Kotlin client and CLI</h4>
+      <p>A native Android app for background sync, and a JVM CLI over USB serial. Both reuse the generated codec. Pick these up when the web client stops being the interesting problem.</p>
+      <em>open-ended · optional by design</em>
+    </div></div>
+
+    <h3>Keeping it alive</h3>
+    <p>Hobby projects rarely die from difficulty. They die from lost context — you put it down for three weeks, come back, and cannot remember why the scheduler had that peculiar branch or which sdkconfig line fixed the reconnect bug.</p>
+    <ul>
+      <li><b>Keep a dated build log in the repo.</b> Plain markdown, one entry per session: what you tried, what surprised you, what you would do next. Costs nothing, and is the difference between resuming and restarting.</li>
+      <li><b>Commit the broken state.</b> A branch called <code>wip-scheduler-confused</code> with a note in the log beats a clean repo you cannot re-enter.</li>
+      <li><b>Build the mock node early</b> (see section 08). Working on the client with the hardware in a drawer is what lets you make progress on a weekday evening.</li>
+      <li><b>Stop at a milestone, not mid-refactor.</b> Ending a session with tests green is a gift to whoever picks it up, which is you in a month.</li>
+    </ul>
+</div>
+</section>
+
+<!-- ============ 12 RISKS ============ -->
+<section id="risks">
+  <div class="rail"><span class="no">12</span>Risks<p>Each of these has cost somebody a weekend — which on a hobby project is most of the budget.</p></div>
+  <div class="body">
+    <h2>Known traps</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Trap</th><th>Symptom</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>MTU assumed, not read</td><td>Works on one phone, truncates on another</td><td>Size chunks from the negotiated value at runtime, always</td></tr>
+        <tr><td>Notification queue overflow</td><td>Silent chunk loss under fast sync</td><td>Respect NimBLE's notify-complete callback; never loop blindly</td></tr>
+        <tr><td>GNSS cold start</td><td>First minute of every trip missing</td><td>Keep the backup rail powered from the PMU for warm starts</td></tr>
+        <tr><td>SPI bus shared</td><td>Corrupt writes only when a beacon fires mid-write</td><td>Separate buses for SX1262 and SD, non-negotiable</td></tr>
+        <tr><td>Filesystem write during sleep entry</td><td>Corrupt LittleFS, sometimes unrecoverable</td><td>Single storage owner; drain, flush, then signal ready-to-sleep</td></tr>
+        <tr><td>One UI battery restrictions</td><td>Background sync stops silently after days</td><td>Detect, then guide the user explicitly at first run</td></tr>
+        <tr><td>Stale BLE bonds</td><td>Connection failures that look exactly like firmware bugs</td><td>Don't bond during development; add pairing once the protocol is stable</td></tr>
+        <tr><td>Geofence jitter</td><td>Hundreds of events overnight from a parked device</td><td>Streak counter plus dead band, tuned in the field not the lab</td></tr>
+        
+        <tr><td>Wrong-band antenna</td><td>Poor range that reads exactly like a firmware bug; PA degrades over weeks</td><td>Match the whip to the silkscreen marking. A 433 and an 868 whip look identical apart from length.</td></tr><tr><td>LoRa TX without antenna</td><td>Damaged power amplifier, gradual range loss</td><td>Firmware refuses TX until a boot-time flag is set post-assembly</td></tr><tr><td>AP left up by default</td><td>Runtime collapses from a week to a day</td><td>Idle timeout enforced in firmware, not policy. Log the reason the AP came up.</td></tr><tr><td>Android drops the AP</td><td>Client vanishes mid-session because the OS preferred mobile data</td><td>Expect it. BLE presence stays up underneath; the web client reconnects and resumes from its cursor.</td></tr><tr><td>One client floods the link</td><td>Others silently starve</td><td>Deficit round-robin plus visible queue state. Never drop without telling the sender.</td></tr><tr><td>Blocking on a sensor at init</td><td>Firmware hangs at boot when one I²C device fails or a variant omits it</td><td>Probe with a timeout, log what answered, branch. Never block on a peripheral.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ============ 13 FUTURE ============ -->
+<section id="future" style="border-bottom:0">
+  <div class="rail"><span class="no">13</span>Future<p>Adjacent projects for when this one stops being the interesting problem.</p></div>
+  <div class="body">
+    <h2>Where it goes next</h2>
+    <h4>Second device</h4>
+    <p>A second 868 MHz SX1262 node — a Heltec V3 or a bare ESP32 plus an Ebyte E22-900M, ₹800–2000 — turns the beacon into a two-way link and gives you a home base station logging to MQTT while you're away. Since you are already on 868, it also drops straight into the Meshtastic <code>IN</code> region if you want mesh alongside your own protocol. Highest-value addition, and the cheapest.</p>
+    <h4>Sensor fusion</h4>
+    <p>Log raw IMU at 200 Hz alongside GPS and implement a complementary filter, then an error-state Kalman filter, in the shared Kotlin module so you can iterate against captured data instead of reflashing. See how long you can dead-reckon with GPS disabled. A multi-week project on its own, and the mathematics transfers everywhere.</p>
+    <h4>Desktop client</h4>
+    <p>Compose Multiplatform on the existing modules. The protocol, the data layer, and most of the view models already work; only the transport and platform bits change.</p>
+    <h4>Fleet mode</h4>
+    <p>Several devices, one app, a base station aggregating beacons. This is where PostGIS finally earns its place — <code>ST_DWithin</code> for server-side geofences, trip segmentation across devices, real spatial queries.</p>
+    <h4>Adjacent experiments the hardware already supports</h4>
+    <ul>
+      <li><b>Stratum-1 NTP server</b> from the 1PPS output — genuinely useful home infrastructure and a hard timing problem.</li>
+      <li><b>Sub-GHz survey mode</b> — sweep RSSI across 410–510 MHz, log against position, produce a coverage heatmap before deploying anything.</li>
+      <li><b>OOK decoder</b> — the SX1262 does raw on-off keying, so the same board can decode your doorbell and weather station while it isn't tracking.</li>
+    </ul>
+    <div class="note ok"><b>No rule for any of the above.</b> These are not a backlog and they are not owed anything. If the vibration analyser sounds better than the LoRa layer one Saturday, build the vibration analyser — the hardware does not care and neither does anyone else. The only real failure mode for this project is grinding through a phase you stopped enjoying because a plan said so.</div>
+  </div>
+</section>
+
+<footer>Hobby build · T-Beam Supreme · stop at phase 03 and it still counts · keep the build log.</footer>
+
+</div>
+</body>
+</html>
