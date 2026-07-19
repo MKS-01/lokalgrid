@@ -84,14 +84,14 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 |---|---|
 | **Product = shared field node**, not hidden asset tracker | The two want opposite designs (months of battery + stealth vs. active use + multi-client). Cannot be both. |
 | **Max 3 clients** | Airtime arbitration is interesting at 3; admission control complexity explodes beyond it, with no learning gain. |
-| **Web client (PWA) is primary** | Removes the install barrier entirely — this is the *only* real differentiator vs. Meshtastic. Native Android is optional/later. |
+| **Native Android app (Kotlin) is the client** *(2026-07-20, supersedes "PWA is primary")* | Background BLE sync via a foreground service — positions and chat backfilling with the screen off — is the feature a browser can never provide, and it matters more here than the zero-install pitch. The install barrier is accepted: this is a personal build for a known group, not a product for strangers. The PWA plan (Vite/Svelte/Workbox, node-served assets) is removed; a browser client may return later as an optional extra, not as the primary. |
 | **WiFi SoftAP on demand, BLE always-on underneath** | AP draws ~100 mA vs BLE ~2 mA. AP-by-default turns a week of runtime into a day. |
 | **AP idle timeout enforced in firmware** | Not a setting. A config toggle will eventually be left wrong. |
 | **ESP-IDF v5.x + CMake directly** | Not Arduino (hides sleep/NimBLE/power APIs). Not PlatformIO (IDF support lags on S3). |
 | **Hand-write the codec first, generate later** | Codegen is introduced in Phase 05, *after* drift has caused a real bug. Understanding beats compliance. |
 | **Uncertainty is rendered, always** | Error ellipses from HDOP, dashed interpolated segments, ages on stale positions. No consumer tracker does this; it is the product's honesty and its identity. |
 | **Chat = one shared channel, text only** *(2026-07-20)* | No DMs, no channels, no media at launch. One room mirrors the product (one node, one group in the field) and keeps Phase 03 small. Revisit only after Phase 03 is alive. |
-| **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Nothing serves multiple phones a node-hosted PWA; the gap is still open. Shared field node stands. |
+| **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Shared field node stands: one node, multiple phones, everyone on one map. (The client later moved from PWA to native Android — see the superseding row above.) |
 
 ### REJECTED — do not re-propose
 
@@ -123,14 +123,12 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | Transport | Throughput | Node draw | Range | Job |
 |---|---|---|---|---|
 | BLE | 15–25 KB/s (2M PHY) | ~2 mA avg | ~20 m | Always-on presence, status, alerts. The idle state. |
-| WiFi SoftAP | 2–8 Mbit/s | ~100 mA | ~30 m | On demand. Serves the web client, bulk history, map tiles, 3 clients at once. |
+| WiFi SoftAP | 2–8 Mbit/s | ~100 mA | ~30 m | On demand. Bulk history sync and live WebSocket stream to the Android app, 3 clients at once. |
 | LoRa | ~1 kbit/s | 110 mA in TX | km | The link out. Positions + short messages. Duty-cycle bound. |
 
 **Known Android behaviours to design around:**
-- Android flags an AP with no internet route and may silently fall back to mobile data mid-session. Expect the disconnect; BLE stays up underneath; client resumes from its cursor.
-- No background operation in a browser. Close the tab, client is gone. This is why BLE presence exists.
-- Captive-portal redirect helps discovery but behaves differently per Android version. Convenience only, never the path.
-- Target device is a **Samsung Galaxy S25**. For any native client: One UI "Deep sleeping apps" and Adaptive Battery kill background work silently — needs an onboarding screen.
+- Android flags an AP with no internet route and may silently fall back to mobile data mid-session. The app must bind its socket to the WiFi network explicitly (`ConnectivityManager.bindProcessToNetwork` / per-socket `Network.bindSocket`); BLE stays up underneath; client resumes from its cursor.
+- Target device is a **Samsung Galaxy S25**. One UI "Deep sleeping apps" and Adaptive Battery kill background work silently — the app needs an onboarding screen that walks through exempting it, and a foreground service (`connectedDevice` type) for background BLE sync.
 
 ### Multi-client arbitration — the core engineering
 
@@ -294,7 +292,7 @@ nvs      , data, nvs      , 0x9000 , 0x6000
 otadata  , data, ota      , 0xf000 , 0x2000
 app0     , app , ota_0    , 0x10000, 0x280000
 app1     , app , ota_1    ,        , 0x280000
-storage  , data, littlefs ,        , 0x2C0000   # logs + web assets
+storage  , data, littlefs ,        , 0x2C0000   # track logs + manifest
 ```
 
 ### sdkconfig — the lines that matter
@@ -318,7 +316,7 @@ This is the most underused feature of the chip. Configure it before you need it,
 
 Also: `esp_log` with per-tag levels (turn the scheduler chatty without drowning in WiFi logs), task watchdog that names the offending task, crash handler writing backtrace to LittleFS.
 
-### BLE connection setup (for native client later)
+### BLE connection setup (the client's core path)
 
 ```kotlin
 gatt.requestMtu(517)
@@ -340,24 +338,24 @@ Manifest permissions (Android 12+):
 
 ---
 
-## 6. Web client stack
+## 6. Android client stack
+
+*(This section replaced the web/PWA client stack on 2026-07-20 — see the superseding decision in section 2.)*
 
 | Concern | Choice | Note |
 |---|---|---|
-| Build | Vite + TypeScript | Emits hashed, precompressed `.gz` into the LittleFS image dir |
-| Framework | Svelte | No runtime shipped. Preact is the fallback. React is too heavy. |
-| Size guard | `size-limit` in CI | **Fails above 300 KB gzipped**, map library included |
-| Map | MapLibre GL JS + `pmtiles` protocol | Range requests against one `.pmtiles` on SD. Node serves its own basemap. |
-| Local store | IndexedDB via `idb` | Holds cursor + history → reconnect is a delta |
-| Offline shell | Workbox service worker | Loads even when node is asleep; "Add to home screen" gives an icon, no store |
-| Transport | Native `WebSocket` + backoff reconnect | On reopen, send stored cursor and resume |
-| Tests | Vitest (codec), Playwright (shell) | Codec tests run the shared golden vectors |
+| Language / UI | Kotlin + Jetpack Compose | Single module to start; protocol code in a plain-Kotlin module for CLI/test reuse |
+| Map | MapLibre Android SDK + `pmtiles` | Basemap tiles pulled from the node over WiFi once, cached on the phone |
+| Local store | Room (SQLite) | Holds cursor + history → reconnect is a delta |
+| Background sync | Foreground service, `connectedDevice` type | BLE sync with the screen off — the reason the app exists |
+| Transports | BLE GATT (always) + OkHttp WebSocket over SoftAP (bulk/live) | Bind sockets to the WiFi `Network` object so Android's mobile-data fallback cannot steal the session |
+| Tests | JUnit (codec vs golden vectors), instrumented test against the mock node | Protocol module runs on JVM — no device needed for codec work |
 
-**Precompress at build time.** The ESP32 must never gzip on the fly.
+**Onboarding screen is not optional.** One UI's "Deep sleeping apps" and Adaptive Battery silently kill background sync on the S25 — walk the user through exempting the app on first run, and detect + warn when it happens anyway.
 
 ### Build the mock node on day one
 
-~200 lines of Node.js serving the same WebSocket protocol from a captured session. Lets you build the entire web client with hardware unplugged, iterate in milliseconds instead of flash cycles, and run Playwright deterministically.
+~200 lines of Node.js (or Ktor) serving the same WebSocket protocol from a captured session, plus a replay mode. Lets you build the entire app with hardware unplugged, iterate in seconds instead of flash cycles, and run instrumented tests deterministically. BLE cannot be mocked this way — develop the GATT path against the real board, everything else against the mock.
 
 Highest-leverage code in the project. Do not skip it.
 
@@ -369,27 +367,26 @@ Highest-leverage code in the project. Do not skip it.
 - Failure states name the failure and offer the next action.
 - Config staged locally, written explicitly. Never silently reconfigure mid-edit.
 
-### Three languages, one wire format (Phase 05, not before)
+### Two languages, one wire format (Phase 05, not before)
 
-Firmware is C, web is TypeScript, optional CLI/native is Kotlin. Hand-writing the codec three times guarantees drift.
+Firmware is C, app/CLI is Kotlin. Hand-writing the codec twice still guarantees drift eventually — that drift bug is the Phase 05 trigger.
 
 ```
 schema/
   records.yaml      # field name, type, scale, unit
   control.proto
-  gen.py            # emits all three targets
+  gen.py            # emits both targets
     → firmware/gen/records.h    (packed structs + static_asserts on size)
-    → web/src/gen/records.ts    (DataView reader/writer)
-    → shared/gen/Records.kt     (ByteBuffer reader/writer)
+    → shared/gen/Records.kt     (ByteBuffer reader/writer — app, CLI, tests)
 ```
 
 | Message class | Format | Why |
 |---|---|---|
 | Track records | Fixed-width struct, generated | 32 B, random access. Protobuf costs ~40% more and kills seeking. |
-| Control, config, chat | Protobuf (nanopb / protobuf-ts / protobuf-kotlin) | Schema evolution matters, volume is low |
+| Control, config, chat | Protobuf (nanopb / protobuf-kotlin) | Schema evolution matters, volume is low |
 | LoRa beacon | Hand-packed 18 B | Every byte is airtime |
 
-**Generate golden vectors too** — one hex fixture file all three implementations decode in their own suite. If C, TS and Kotlin agree on the same 40 bytes, the format is one thing rather than three hopeful ones.
+**Generate golden vectors too** — one hex fixture file both implementations decode in their own suite. If C and Kotlin agree on the same 40 bytes, the format is one thing rather than two hopeful ones.
 
 ---
 
@@ -397,14 +394,14 @@ schema/
 
 Ordered for earliest visible milestone. The original plan front-loaded a week of pure Kotlin with nothing to look at — that is how side projects die.
 
-### Phase 01 — Blink, then serve · *one evening*
-ESP-IDF toolchain up. **USB-JTAG debugger working with a real breakpoint.** SoftAP running. Static page served from LittleFS that a phone can load. Nothing else.
+### Phase 01 — Blink, then be seen · *one evening*
+ESP-IDF toolchain up. **USB-JTAG debugger working with a real breakpoint.** LittleFS mounted. SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Nothing else.
 
 ### Phase 02 — One phone, live position · *one weekend*
-NMEA parsed → WebSocket → MapLibre map with accuracy ellipse. **Hand-write the codec.** No schema, no generation, no Kotlin. Get the dot on the map.
+Minimal Android app: connect to the node's AP, NMEA parsed → WebSocket → MapLibre map with accuracy ellipse. **Hand-write the codec** (C and Kotlin). No schema, no generation. Get the dot on the map.
 
 ### Phase 03 — Three phones, shared state · *two weekends*
-Per-client cursors, message history, chat, everyone seeing everyone.
+Per-client cursors, message history, chat (one channel, text only), everyone seeing everyone.
 **⚑ NATURAL STOPPING POINT.** This is a complete project. Stopping here is success.
 
 ### Phase 04 — Make it fight · *two weekends*
@@ -416,8 +413,8 @@ By now the hand-written codec has bitten you. *That* is when the schema and code
 ### Phase 06 — Optional: the link out
 LoRa under the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only if there is somewhere to take it where WiFi range genuinely runs out.
 
-### Phase 07 — Optional: Kotlin client and CLI
-Native Android for background sync; JVM CLI (Clikt + jSerialComm) over USB serial. Both reuse the generated codec.
+### Phase 07 — Optional: background sync polish and CLI
+Foreground-service BLE sync hardening (One UI battery exemptions, resume-from-cursor soak tests); JVM CLI (Clikt + jSerialComm) over USB serial reusing the shared Kotlin codec. A browser client could also return here as an extra, never as the primary.
 
 CLI surface sketch:
 ```
@@ -444,7 +441,7 @@ Hobby projects die from **lost context**, not difficulty.
 | Wrong-band antenna | Poor range that reads exactly like a firmware bug; PA degrades over weeks | Match the whip to the silkscreen |
 | TX with no antenna | Damaged PA | Firmware refuses TX until a post-assembly flag is set |
 | AP left up by default | Runtime collapses from a week to a day | Idle timeout in firmware, not config. Log why the AP came up. |
-| Android drops the AP | Client vanishes mid-session | Expect it. BLE underneath; client resumes from cursor. |
+| Android drops the AP | Client vanishes mid-session | Bind app sockets to the WiFi `Network`; BLE underneath; client resumes from cursor. |
 | One client floods | Others silently starve | Deficit round-robin + visible queue state. Never drop silently. |
 | MTU assumed not read | Works on one phone, truncates on another | Size chunks from negotiated value at runtime |
 | Notification queue overflow | Silent chunk loss under fast sync | Respect NimBLE notify-complete callback; never loop blindly |
@@ -461,17 +458,15 @@ Hobby projects die from **lost context**, not difficulty.
 
 **Immediate blocker:** confirm the LoRa band from the silkscreen (section 1). Does not block Phases 01–03, which use no LoRa at all.
 
-**Next action:** Phase 01. Concretely —
+**Next action:** Phase 01. The skeleton already exists under `firmware/` (CMake shell, partitions.csv, sdkconfig.defaults, LittleFS mount in `app_main`). Remaining —
 
-1. `idf.py create-project node` targeting `esp32s3`
-2. Partition CSV from section 5
-3. `sdkconfig.defaults` with the lines from section 5
-4. Get OpenOCD + GDB attached over built-in USB-JTAG, set a breakpoint in `app_main`, confirm it hits
-5. SoftAP up with a fixed SSID
-6. LittleFS partition mounted, one `index.html` served by `esp_http_server`
-7. Load it from the phone. Done.
+1. Install ESP-IDF v5.x (`firmware/README.md` has the exact commands), `idf.py set-target esp32s3`
+2. First `idf.py build flash monitor` — expect "littlefs mounted" and the heartbeat log
+3. Get OpenOCD + GDB attached over built-in USB-JTAG, set a breakpoint in `app_main`, confirm it hits
+4. SoftAP up with a fixed SSID + NimBLE advertising
+5. Phone sees `lokalgrid` in its WiFi list and in nRF Connect. Done.
 
-**Then:** Phase 02, and start the build log.
+**Then:** Phase 02 (minimal Android app, dot on the map), and keep the build log going.
 
 ### Adjacent projects deliberately parked
 

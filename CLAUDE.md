@@ -12,13 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Planning complete, no code written yet. Next action is Phase 01 (section 7): `idf.py create-project node` targeting `esp32s3`, USB-JTAG breakpoint working, SoftAP up, one page served from LittleFS. Not a git repo yet.
+Firmware skeleton exists under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`); ESP-IDF not yet installed on this machine. Next action is Phase 01 (section 7): toolchain install, USB-JTAG breakpoint working, SoftAP + BLE advertising up, phone sees the node. Repo: github.com/MKS-01/lokalgrid.
 
 ## Stack — already decided, do not relitigate
 
 - Firmware: **ESP-IDF v5.x + CMake directly**. Not Arduino, not PlatformIO.
 - BLE: NimBLE. LoRa: RadioLib as an IDF component. FS: `esp_littlefs`.
-- Web client: **Vite + TypeScript + Svelte**, PWA-first. Not React.
+- Client: **native Android app (Kotlin)**. The PWA/web-client plan was **removed 2026-07-20** (superseded decision in section 2) — background BLE sync via a foreground service is the feature a browser cannot do. Do not reintroduce a web client without reading that entry.
 - Codec is **hand-written until Phase 05**. Do not introduce schema/codegen early — the drift bug is the point.
 
 ## Hard invariants

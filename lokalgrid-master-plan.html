@@ -188,11 +188,11 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
 <header class="top">
   <div class="kicker">LILYGO T-Beam Supreme (S3-Core v3.0 + baseboard) · L76K · SX1262 · Kotlin · Galaxy S25 · program plan</div>
   <h1>Lokalgrid<em>a shared field node — hobby build</em></h1>
-  <p class="thesis">One device carrying the GNSS, the storage and the long-range link, shared by two or three phones at once, none of which install anything. Built for the engineering rather than for users — so it is scoped to reach something that works early, and to be abandonable without guilt after that.</p>
+  <p class="thesis">One device carrying the GNSS, the storage and the long-range link, shared by two or three phones at once, each running a native Android app that keeps syncing with the screen off. Built for the engineering rather than for users — so it is scoped to reach something that works early, and to be abandonable without guilt after that.</p>
   <div class="strip">
     <div><span class="dot"></span><b>Device</b> ESP-IDF, FreeRTOS</div>
     <div><b>Links</b> BLE idle · WiFi AP on demand · LoRa</div>
-    <div><b>Clients</b> browser, 3 max</div>
+    <div><b>Clients</b> Android app, 3 max</div>
     <div><b>Shared</b> KMP protocol</div>
     <div><b>Tooling</b> JVM CLI</div>
     <div><b>First milestone</b> ~3 weekends</div>
@@ -606,12 +606,12 @@ crc16 CCITT over seq + len + payload</pre>
       <thead><tr><th>Transport</th><th class="m">Throughput</th><th class="m">Node draw</th><th class="m">Range</th><th>Job</th></tr></thead>
       <tbody>
         <tr><td><b>BLE</b></td><td class="m">15–25 KB/s</td><td class="m">~2 mA avg</td><td class="m">~20 m</td><td>Always-on presence, status, alerts, background sync. The idle state.</td></tr>
-        <tr><td><b>WiFi SoftAP</b></td><td class="m">2–8 Mbit/s</td><td class="m">~100 mA</td><td class="m">~30 m</td><td>Brought up on demand. Bulk history, map tiles, serving the web client, several phones at once.</td></tr>
+        <tr><td><b>WiFi SoftAP</b></td><td class="m">2–8 Mbit/s</td><td class="m">~100 mA</td><td class="m">~30 m</td><td>Brought up on demand. Bulk history, map tiles, live WebSocket stream to the app, several phones at once.</td></tr>
         <tr><td><b>LoRa</b></td><td class="m">~1 kbit/s</td><td class="m">110 mA in TX</td><td class="m">km</td><td>The link out. Positions and short messages only, duty-cycle bound.</td></tr>
       </tbody>
     </table></div>
     <p>The AP is the expensive one — roughly fifty times BLE’s idle draw — so it must not be the default state. Bring it up on a button press, on a BLE command from a client, or on first LoRa alert, and drop it after a few minutes of no HTTP activity. That single rule is the difference between a device that lasts a weekend and one that lasts an afternoon.</p>
-    <div class="note bad"><b>What the AP costs you beyond power.</b> Android flags a network with no internet route and may quietly fall back to mobile data mid-session — handle the disconnect rather than assuming it stays. There is no background operation: close the browser tab and the client is gone, which is precisely why BLE stays up underneath. And a captive-portal redirect helps discovery but behaves differently on every Android version, so treat it as a convenience, never as the path.</div>
+    <div class="note bad"><b>What the AP costs you beyond power.</b> Android flags a network with no internet route and may quietly fall back to mobile data mid-session — the app must bind its sockets to the WiFi <code>Network</code> object rather than assuming the route stays. And One UI's battery management will kill background work silently, which is why the app's BLE sync runs in a foreground service and BLE stays up underneath the AP.</div>
 
     <h3>Multi-client arbitration</h3>
     <p>This is the part that does not exist in a one-phone design, and it is where the real engineering lives. One radio, three clients, all wanting to talk.</p>
@@ -686,7 +686,7 @@ epoch      u32     flags   u16     battery u8   hdop u8
 <i>// ReplayTransport   — reads a captured session, for tests and demos</i></pre>
 
     <h3>Three languages, one wire format</h3>
-    <p>The web client is TypeScript, the firmware is C, the CLI and native app are Kotlin. Hand-writing the codec three times guarantees drift, and the drift will surface as a bug you cannot reproduce on either side alone. So generate it.</p>
+    <p>The firmware is C; the app and CLI are Kotlin. Hand-writing the codec twice still guarantees drift eventually, and the drift will surface as a bug you cannot reproduce on either side alone. So generate it (Phase 05, after the drift bug has taught its lesson).</p>
     <div class="tw"><table>
       <thead><tr><th>Message class</th><th>Format</th><th>Why</th></tr></thead>
       <tbody>
@@ -864,7 +864,7 @@ epoch      u32     flags   u16     battery u8   hdop u8
     <h3>Navigation and copy rules</h3>
     <ul>
       <li>Five tabs, flat. Diagnostics is reached by long-pressing the app bar title, not by a sixth tab — it's for you, not for a user.</li>
-      <li>This is a web client served from the node, so it renders identically on any phone that joins the AP. No install, no store, no per-platform build.</li>
+      <li>One native Android app; screens are Compose so the same design system carries every tab. The wireframes below are the contract regardless of client tech.</li>
       <li><b>Every position carries its uncertainty.</b> Error ellipses sized from HDOP, interpolated segments dashed, stale positions labelled with their age. Never a crisp dot implying precision the GNSS did not deliver.</li>
       <li>Queue state is visible. &ldquo;Queued 40 s, ravi ahead of you&rdquo; is honest and calming; a spinner is neither.</li>
       <li>Every failure state names the failure and offers the next action. <em>Retry from last good point</em>, never a red triangle.</li>
@@ -876,42 +876,13 @@ epoch      u32     flags   u16     battery u8   hdop u8
 
 <!-- ============ 08 ANDROID ============ -->
 <section id="android">
-  <div class="rail"><span class="no">08</span>Clients<p>Web first. A native app only where the browser genuinely cannot go.</p></div>
+  <div class="rail"><span class="no">08</span>Clients<p>One native Android app. The PWA plan was removed 2026-07-20.</p></div>
   <div class="body">
     <h2>Clients</h2>
-    <h3>The web client is the product</h3>
-    <p>A PWA served from LittleFS over the SoftAP removes the single biggest adoption barrier this class of device has: nobody installs anything. Three people join the AP, open a browser, and they are in. It also collapses your client work from N platform builds to one.</p>
-    <div class="tw"><table>
-      <thead><tr><th>Concern</th><th>Choice</th><th>Reason</th></tr></thead>
-      <tbody>
-        <tr><td>Serving</td><td><code>esp_http_server</code> + gzipped assets in LittleFS</td><td>A whole app in ~300 KB. Precompress at build time; the ESP32 must not gzip on the fly.</td></tr>
-        <tr><td>Live data</td><td>WebSocket per client</td><td>Bidirectional, low overhead, and the natural fit for the per-client cursor model.</td></tr>
-        <tr><td>Framework</td><td>Svelte or Preact, no build-time bloat</td><td>Bundle size is a hard constraint here in a way it never is on the web.</td></tr>
-        <tr><td>Maps</td><td>MapLibre GL JS + PMTiles on the SD card</td><td>The node serves its own tiles. Genuinely offline, no key, no quota.</td></tr>
-        <tr><td>Storage</td><td>IndexedDB per client</td><td>History survives a tab close, so a reconnect is a delta not a full resync.</td></tr>
-        <tr><td>Install</td><td>Web app manifest + service worker</td><td>&ldquo;Add to home screen&rdquo; gives an app icon with no store involved.</td></tr>
-      </tbody>
-    </table></div>
-    <div class="note"><b>Budget the bundle like firmware.</b> Every kilobyte is served over WiFi from a microcontroller to three clients at once. Target under 300 KB gzipped for the whole client including the map library. That constraint is a feature — it keeps the UI honest.</div>
-
-    <h4>Build and tooling</h4>
-    <div class="tw"><table>
-      <thead><tr><th>Concern</th><th>Choice</th><th>Note</th></tr></thead>
-      <tbody>
-        <tr><td>Build</td><td>Vite + TypeScript</td><td>Emits hashed, precompressed <code>.gz</code> assets straight into the firmware&rsquo;s LittleFS image directory.</td></tr>
-        <tr><td>Framework</td><td>Svelte</td><td>No runtime shipped to the client. Preact is the fallback if you want React idioms; plain React is too heavy here.</td></tr>
-        <tr><td>Size guard</td><td><code>size-limit</code> in CI</td><td>Fails the build above 300 KB gzipped. Treat it like a firmware flash-size check, because that is what it is.</td></tr>
-        <tr><td>Map</td><td>MapLibre GL JS + <code>pmtiles</code> protocol</td><td>Range requests against a single <code>.pmtiles</code> file on the SD card. The node serves its own basemap.</td></tr>
-        <tr><td>Local store</td><td>IndexedDB via <code>idb</code></td><td>Holds the cursor and history so a reconnect is a delta, not a full resync.</td></tr>
-        <tr><td>Offline shell</td><td>Workbox service worker</td><td>App loads even when the node is asleep. &ldquo;Add to home screen&rdquo; gives an icon with no store.</td></tr>
-        <tr><td>Transport</td><td>Native <code>WebSocket</code> + reconnect with backoff</td><td>On reopen, send the stored cursor and resume. Never assume the socket survived.</td></tr>
-        <tr><td>Tests</td><td>Vitest for codec, Playwright against the mock node</td><td>Codec tests run the generated golden vectors, identical to the firmware suite.</td></tr>
-      </tbody>
-    </table></div>
-    <div class="note"><b>Build a mock node in Node.js on day one.</b> A ~200-line script that serves the same WebSocket protocol and replays a captured session. You then develop the entire web client with the hardware unplugged, iterate in milliseconds instead of a flash cycle, and get deterministic Playwright runs. It is the highest-leverage 200 lines in the project.</div>
-
-    <h3>When you still want a native Android client</h3>
-    <p>The browser cannot do background work. If you want the node to sync to a phone that is in a pocket with the screen off — the tracker use case rather than the group use case — that needs BLE and a native app. Build it second, sharing the same protocol module.</p>
+    <div class="note"><b>Decision changed — 2026-07-20.</b> This section originally specified a PWA served from the node (Vite/Svelte/Workbox, 300&nbsp;KB budget) as the primary client. That plan is <b>removed</b>: background BLE sync with the screen off — a foreground service backfilling positions and chat while the phone sits in a pocket — is the feature a browser can never provide, and it outweighs the zero-install pitch for a personal build serving a known group. The superseding entry lives in <code>PROJECT.md</code> §2. A browser client may return later as an optional extra, never as the primary.</div>
+    <h3>The Android app is the client</h3>
+    <p>Kotlin end to end: the app, the protocol/codec module, and the CLI all share one implementation. Live data over a WebSocket when the SoftAP is up — with the socket explicitly bound to the WiFi <code>Network</code> so Android's mobile-data fallback cannot steal the session — and BLE GATT always-on underneath for presence and background sync.</p>
+    <div class="note"><b>Build a mock node on day one.</b> A ~200-line script that serves the same WebSocket protocol and replays a captured session. You then develop the entire app with the hardware unplugged and iterate in seconds instead of a flash cycle. BLE cannot be mocked this way — develop the GATT path against the real board, everything else against the mock. It is the highest-leverage 200 lines in the project.</div>
 
     <h3>Stack</h3>
     <div class="tw"><table>
@@ -1015,14 +986,14 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
     <p>Reordered for a hobby build: the earliest possible moment where something visibly works, then depth afterwards. The original plan front-loaded a week of pure Kotlin with nothing to look at, which is exactly how a side project dies.</p>
 
     <div class="phase"><div class="n">01</div><div>
-      <h4>Blink, then serve</h4>
-      <p>ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, SoftAP running, a static page served from LittleFS that your phone can load. Nothing else.</p>
+      <h4>Blink, then be seen</h4>
+      <p>ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, LittleFS mounted, SoftAP with a fixed SSID plus BLE advertising — the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Nothing else.</p>
       <em>one evening · the whole toolchain proven, and the debugger set up before you need it</em>
     </div></div>
 
     <div class="phase"><div class="n">02</div><div>
       <h4>One phone, live position</h4>
-      <p>NMEA parsed, pushed over a WebSocket, rendered on a MapLibre map with an accuracy ellipse. Hand-write the codec — no schema, no generation, no Kotlin. Just get the dot on the map.</p>
+      <p>Minimal Android app: join the node's AP, NMEA parsed, pushed over a WebSocket, rendered on a MapLibre map with an accuracy ellipse. Hand-write the codec in C and Kotlin — no schema, no generation. Just get the dot on the map.</p>
       <em>one weekend · the first moment that feels like something</em>
     </div></div>
 
@@ -1052,7 +1023,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
 
     <div class="phase"><div class="n">07</div><div>
       <h4>Optional: Kotlin client and CLI</h4>
-      <p>A native Android app for background sync, and a JVM CLI over USB serial. Both reuse the generated codec. Pick these up when the web client stops being the interesting problem.</p>
+      <p>Background-sync hardening (One UI battery exemptions, resume-from-cursor soak tests), and a JVM CLI over USB serial reusing the shared Kotlin codec. A browser client could also return here as an extra, never as the primary.</p>
       <em>open-ended · optional by design</em>
     </div></div>
 
@@ -1084,7 +1055,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
         <tr><td>Stale BLE bonds</td><td>Connection failures that look exactly like firmware bugs</td><td>Don't bond during development; add pairing once the protocol is stable</td></tr>
         <tr><td>Geofence jitter</td><td>Hundreds of events overnight from a parked device</td><td>Streak counter plus dead band, tuned in the field not the lab</td></tr>
         
-        <tr><td>Wrong-band antenna</td><td>Poor range that reads exactly like a firmware bug; PA degrades over weeks</td><td>Match the whip to the silkscreen marking. A 433 and an 868 whip look identical apart from length.</td></tr><tr><td>LoRa TX without antenna</td><td>Damaged power amplifier, gradual range loss</td><td>Firmware refuses TX until a boot-time flag is set post-assembly</td></tr><tr><td>AP left up by default</td><td>Runtime collapses from a week to a day</td><td>Idle timeout enforced in firmware, not policy. Log the reason the AP came up.</td></tr><tr><td>Android drops the AP</td><td>Client vanishes mid-session because the OS preferred mobile data</td><td>Expect it. BLE presence stays up underneath; the web client reconnects and resumes from its cursor.</td></tr><tr><td>One client floods the link</td><td>Others silently starve</td><td>Deficit round-robin plus visible queue state. Never drop without telling the sender.</td></tr><tr><td>Blocking on a sensor at init</td><td>Firmware hangs at boot when one I²C device fails or a variant omits it</td><td>Probe with a timeout, log what answered, branch. Never block on a peripheral.</td></tr>
+        <tr><td>Wrong-band antenna</td><td>Poor range that reads exactly like a firmware bug; PA degrades over weeks</td><td>Match the whip to the silkscreen marking. A 433 and an 868 whip look identical apart from length.</td></tr><tr><td>LoRa TX without antenna</td><td>Damaged power amplifier, gradual range loss</td><td>Firmware refuses TX until a boot-time flag is set post-assembly</td></tr><tr><td>AP left up by default</td><td>Runtime collapses from a week to a day</td><td>Idle timeout enforced in firmware, not policy. Log the reason the AP came up.</td></tr><tr><td>Android drops the AP</td><td>Client vanishes mid-session because the OS preferred mobile data</td><td>Bind the app's sockets to the WiFi <code>Network</code>; BLE presence stays up underneath; the app resumes from its cursor.</td></tr><tr><td>One client floods the link</td><td>Others silently starve</td><td>Deficit round-robin plus visible queue state. Never drop without telling the sender.</td></tr><tr><td>Blocking on a sensor at init</td><td>Firmware hangs at boot when one I²C device fails or a variant omits it</td><td>Probe with a timeout, log what answered, branch. Never block on a peripheral.</td></tr>
       </tbody>
     </table></div>
   </div>
@@ -1151,6 +1122,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
     <ul>
       <li><b>Concept reconfirmed:</b> shared field node — GPS + tracker + chat, board as station, multiple phones, everyone visible on the map.</li>
       <li><b>Chat scoped:</b> one shared channel, text only at launch. No DMs, no channels, no media — one room mirrors one node, one group. Revisit only after Phase 03 is alive.</li>
+      <li><b>Client pivoted later the same day:</b> the PWA plan was removed; the client is a native Android app (background BLE sync beats zero-install for a personal build). See section 08 and <code>PROJECT.md</code> §2. The landscape's "node-served web app" gap noted above is therefore deliberately left unclaimed.</li>
       <li><b>Band preference sharpened:</b> if the silkscreen turns out to read 433 MHz, that is now the <em>preferred</em> outcome (satellites and sondes live there for the parked option B). Still read the silkscreen before buying the whip.</li>
       <li><b>Roadmap unchanged:</b> Phases 01–03 were identical under every serious option, so nothing moved.</li>
     </ul>
