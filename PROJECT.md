@@ -13,7 +13,7 @@ This is a **decision record**, not a tutorial. It exists so that a fresh session
 
 If you are an agent reading this: sections 1–6 are binding constraints. Section 2 lists things that were **explicitly rejected** — do not re-propose them without reading the rationale. Section 9 is where work resumes.
 
-**Project status:** planning complete, no code written yet. Next action is Phase 01 (section 7).
+**Project status:** planning complete, no code written yet. Next action is Phase 00 — the mock node (section 7), built mock-first so the app comes up before the hardware does.
 
 ---
 
@@ -83,7 +83,7 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | Decision | Rationale |
 |---|---|
 | **Product = shared field node**, not hidden asset tracker | The two want opposite designs (months of battery + stealth vs. active use + multi-client). Cannot be both. |
-| **Max 3 clients** | Airtime arbitration is interesting at 3; admission control complexity explodes beyond it, with no learning gain. |
+| **Client cap = hardware ceiling (9), not 3** *(2026-07-23, supersedes "Max 3 clients")* | Original cap was 3, chosen because airtime arbitration is interesting at 3 while admission-control complexity was judged to explode beyond it. Raised to the hardware ceiling: NimBLE tops out at **9** concurrent BLE connections (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS` max), WiFi SoftAP at 10 stations. The scheduler must now generalise beyond N=3 — see the hardware-vs-chosen limits note in section 3. The real bottleneck was never the connection count but LoRa airtime: 3 phones at 1 Hz already saturate the link, so 9 clients means aggressive position decimation and honest queue reasons for everyone past the airtime budget. |
 | **Native Android app (Kotlin) is the client** *(2026-07-20, supersedes "PWA is primary")* | Background BLE sync via a foreground service — positions and chat backfilling with the screen off — is the feature a browser can never provide, and it matters more here than the zero-install pitch. The install barrier is accepted: this is a personal build for a known group, not a product for strangers. The PWA plan (Vite/Svelte/Workbox, node-served assets) is removed; a browser client may return later as an optional extra, not as the primary. |
 | **WiFi SoftAP on demand, BLE always-on underneath** | AP draws ~100 mA vs BLE ~2 mA. AP-by-default turns a week of runtime into a day. |
 | **AP idle timeout enforced in firmware** | Not a setting. A config toggle will eventually be left wrong. |
@@ -123,16 +123,29 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | Transport | Throughput | Node draw | Range | Job |
 |---|---|---|---|---|
 | BLE | 15–25 KB/s (2M PHY) | ~2 mA avg | ~20 m | Always-on presence, status, alerts. The idle state. |
-| WiFi SoftAP | 2–8 Mbit/s | ~100 mA | ~30 m | On demand. Bulk history sync and live WebSocket stream to the Android app, 3 clients at once. |
+| WiFi SoftAP | 2–8 Mbit/s | ~100 mA | ~30 m | On demand. Bulk history sync and live WebSocket stream to the Android app, up to the client cap at once. |
 | LoRa | ~1 kbit/s | 110 mA in TX | km | The link out. Positions + short messages. Duty-cycle bound. |
 
 **Known Android behaviours to design around:**
 - Android flags an AP with no internet route and may silently fall back to mobile data mid-session. The app must bind its socket to the WiFi network explicitly (`ConnectivityManager.bindProcessToNetwork` / per-socket `Network.bindSocket`); BLE stays up underneath; client resumes from its cursor.
 - Target device is a **Samsung Galaxy S25**. One UI "Deep sleeping apps" and Adaptive Battery kill background work silently — the app needs an onboarding screen that walks through exempting it, and a foreground service (`connectedDevice` type) for background BLE sync.
 
+### Client limit — hardware ceiling vs. chosen cap
+
+Two different numbers, do not confuse them:
+
+| Bound | Value | Set by |
+|---|---|---|
+| **BLE concurrent connections** | **9** | NimBLE build cap (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`, max 9). The ESP32-S3 controller advertises ~10 ACL links; NimBLE is the tighter limit. |
+| **WiFi SoftAP stations** | **10** | ESP-IDF cap (`ESP_WIFI_SOFTAP_MAX_STA`, max 10). |
+| **Effective client cap** | **9** | min(BLE, WiFi) — each client holds both a BLE link and a WiFi station. |
+| **Practical stable** | ~4–6 | RAM per client (connection state + ATT buffers + 32-byte key + cursors) and shared throughput erode past this. |
+
+The cap is now **9** (was 3). The true bottleneck is not the socket count but the **single LoRa radio**: 3 phones at 1 Hz already saturate ~1 kbit/s of airtime, so every client beyond the airtime budget gets decimated positions and a renderable queue reason — the arbitration is a physics problem, not a connection-count one.
+
 ### Multi-client arbitration — the core engineering
 
-One radio, three clients. This is what does not exist in Meshtastic's 1:1 model.
+One radio, up to nine clients. This is what does not exist in Meshtastic's 1:1 model.
 
 **Priority lanes:**
 ```
@@ -149,7 +162,7 @@ One radio, three clients. This is what does not exist in Meshtastic's 1:1 model.
 **Client state:**
 ```c
 struct client {
-  uint8_t  id;              // 0..2, assigned at pairing
+  uint8_t  id;              // 0..8, assigned at pairing
   uint32_t msg_cursor;      // last message seq delivered
   uint32_t pos_cursor;      // last position seq delivered
   uint32_t airtime_credit;  // deficit round-robin, in ms
@@ -162,7 +175,7 @@ struct client {
 
 **Backpressure:** 3 phones at 1 Hz saturates LoRa instantly. Node aggregates into one packet per window, decimates by *distance* not time (50 m default).
 
-**Degradation:** 4th client → refuse with a reason. Battery <15% → drop AP, keep BLE + LoRa, tell everyone why.
+**Degradation:** client past the cap (10th connection) → refuse with a reason. Battery <15% → drop AP, keep BLE + LoRa, tell everyone why.
 
 ### Ownership rule
 
@@ -298,8 +311,8 @@ storage  , data, littlefs ,        , 0x2C0000   # track logs + manifest
 ### sdkconfig — the lines that matter
 
 ```
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3      # default is 1 — this is the multi-client switch
-CONFIG_ESP_WIFI_SOFTAP_MAX_STA=4        # 3 clients + rejoin headroom
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      # default is 1; 9 is NimBLE's hard ceiling — the multi-client switch
+CONFIG_ESP_WIFI_SOFTAP_MAX_STA=10       # ESP-IDF max; 9 clients + rejoin headroom
 CONFIG_SPIRAM_MODE_OCT=y                # S3 module is octal PSRAM
 CONFIG_PM_ENABLE=y                      # dynamic frequency scaling
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     # biggest idle-power win
@@ -350,6 +363,7 @@ Manifest permissions (Android 12+):
 | Background sync | Foreground service, `connectedDevice` type | BLE sync with the screen off — the reason the app exists |
 | Transports | BLE GATT (always) + OkHttp WebSocket over SoftAP (bulk/live) | Bind sockets to the WiFi `Network` object so Android's mobile-data fallback cannot steal the session |
 | Tests | JUnit (codec vs golden vectors), instrumented test against the mock node | Protocol module runs on JVM — no device needed for codec work |
+| Test/CI harness | **Android CLI + Journeys** (Google's agentic Android tools) | Terminal-driven build/install/UI-validation for the mock-first phases. **Not for BLE** — see caveat below. |
 
 **Onboarding screen is not optional.** One UI's "Deep sleeping apps" and Adaptive Battery silently kill background sync on the S25 — walk the user through exempting the app on first run, and detect + warn when it happens anyway.
 
@@ -358,6 +372,17 @@ Manifest permissions (Android 12+):
 ~200 lines of Node.js (or Ktor) serving the same WebSocket protocol from a captured session, plus a replay mode. Lets you build the entire app with hardware unplugged, iterate in seconds instead of flash cycles, and run instrumented tests deterministically. BLE cannot be mocked this way — develop the GATT path against the real board, everything else against the mock.
 
 Highest-leverage code in the project. Do not skip it.
+
+### Agentic tooling — Android CLI + Journeys *(2026-07-23)*
+
+Google's agentic Android tools (`developer.android.com/tools/agents`) are the test/CI harness for the **mock-first phases (01–02)**, where they fit cleanly:
+
+- **Android CLI** — terminal-driven build/install/test, CI/CD-friendly. Matches the §5 goal of "CI without hardware": JVM codec + golden-vector tests and the instrumented UI tests run headless.
+- **Journeys** — natural-language UI validation ("open Map, confirm the accuracy ellipse renders; send a chat message, confirm it appears"). This is the concrete form of the "instrumented test against the mock node" test row — the five tabs (Live · Map · Chat · Clients · Config) validated against the mock, deterministically, board unplugged.
+
+**BLE caveat — the reason this is scoped, not blanket:** these tools accelerate only the *mockable* half of the app. **Journeys is UI validation; it cannot exercise a real BLE GATT connection to the T-Beam, and none of these tools touch the Phase 03 hardware path.** The §6 rule still governs: BLE and the foreground-service background sync — the features the app exists for — are developed and tested against the **real board**, never a Journey. Do not let a green Journeys run stand in for BLE coverage.
+
+Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
 ### UI rules
 
@@ -392,23 +417,28 @@ schema/
 
 ## 7. Roadmap
 
-Ordered for earliest visible milestone. The original plan front-loaded a week of pure Kotlin with nothing to look at — that is how side projects die.
+*Restructured mock-first on 2026-07-23 (superseded the hardware-first order below).* Still ordered for **earliest visible milestone** — the change is *which* milestone comes first. The old order opened with hardware (blink, an SSID in a WiFi list) to avoid front-loading "a week of pure Kotlin with nothing to look at." Mock-first keeps that guarantee a different way: the §6 mock node means a **real dot moving on a real map screen** lands in the first sitting or two, with the T-Beam still in its box. A running app beats a blinking LED as a first thing to look at.
 
-### Phase 01 — Blink, then be seen · *one evening*
-ESP-IDF toolchain up. **USB-JTAG debugger working with a real breakpoint.** LittleFS mounted. SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Nothing else.
+**The rule that shapes the order:** everything except the BLE GATT path can be built against the mock node (§6). So the app comes first against the mock; hardware enters exactly where the mock can't follow — the BLE always-on layer and real radio/GNSS/power timing.
 
-### Phase 02 — One phone, live position · *one weekend*
-Minimal Android app: connect to the node's AP, NMEA parsed → WebSocket → MapLibre map with accuracy ellipse. **Hand-write the codec** (C and Kotlin). No schema, no generation. Get the dot on the map.
+### Phase 00 — Mock node + dummy data · *one evening*
+The §6 day-one task, now literally day one. ~200 lines (Node.js or Ktor) serving the **same WebSocket protocol** the real node will, from a synthetic session plus a replay mode. Golden vectors for the codec live here too. No hardware, no ESP-IDF. This is the highest-leverage code in the project — it makes every phase below buildable on a weekday evening with the board unplugged.
 
-### Phase 03 — Three phones, shared state · *two weekends*
-Per-client cursors, message history, chat (one channel, text only), everyone seeing everyone.
-**⚑ NATURAL STOPPING POINT.** This is a complete project. Stopping here is success.
+### Phase 01 — App against the mock: dot on the map · *one weekend*
+Minimal Android app: connect to the mock's WebSocket, NMEA/records → **MapLibre map with accuracy ellipse**. **Hand-write the codec** (Kotlin now; C when hardware arrives). No schema, no generation. Get the dot on the map — entirely against the mock.
+
+### Phase 02 — App against the mock: three phones, shared state · *two weekends*
+Per-client cursors, message history, chat (one channel, text only), everyone seeing everyone — all driven by the mock replaying multiple clients. The multi-client *logic* (cursors, admission reasons, even a first cut of the scheduler) is built and flood-tested here, against fake data, before any silicon. Demoable, but not yet the *complete* thing — that needs the real node.
+
+### Phase 03 — Hardware: real node, BLE for real · *two weekends*
+Now the board comes out. ESP-IDF toolchain up, **USB-JTAG debugger working with a real breakpoint**, LittleFS mounted, SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: **point the app's WebSocket at the real SoftAP**, and **build the BLE GATT path against the real board** (§6: BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes.
+**⚑ NATURAL STOPPING POINT.** Three phones on a shared map, served by the real T-Beam. This is a complete project. Stopping here is success.
 
 ### Phase 04 — Make it fight · *two weekends*
-Deficit round-robin, priority lanes, admission control, backlog interleaving. Test by writing a client that deliberately floods. Most transferable engineering in the project.
+Deficit round-robin, priority lanes, admission control, backlog interleaving — hardened against **real** airtime timing (the mock could exercise the logic; only hardware exercises the clock). Test by writing a client that deliberately floods. Most transferable engineering in the project.
 
 ### Phase 05 — Fix the drift · *one weekend*
-By now the hand-written codec has bitten you. *That* is when the schema and codegen arrive.
+By now the codec, hand-written twice (C on the node, Kotlin in the app), has bitten you. *That* is when the schema and codegen arrive.
 
 ### Phase 06 — Optional: the link out
 LoRa under the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only if there is somewhere to take it where WiFi range genuinely runs out.
@@ -456,17 +486,19 @@ Hobby projects die from **lost context**, not difficulty.
 
 ## 9. Resume here
 
-**Immediate blocker:** confirm the LoRa band from the silkscreen (section 1). Does not block Phases 01–03, which use no LoRa at all.
+**Immediate blocker:** confirm the LoRa band from the silkscreen (section 1). Does not block Phases 00–03, which use no LoRa at all.
 
-**Next action:** Phase 01. The skeleton already exists under `firmware/` (CMake shell, partitions.csv, sdkconfig.defaults, LittleFS mount in `app_main`). Remaining —
+**Next action:** Phase 00 — the mock node. No hardware, no ESP-IDF yet. Build ~200 lines (Node.js or Ktor) that serve the same WebSocket protocol from a synthetic session, with a replay mode, plus the codec golden vectors. Then Phase 01 gets the dot on a MapLibre map against that mock. The T-Beam stays in its box until Phase 03.
+
+The firmware skeleton already exists under `firmware/` (CMake shell, partitions.csv, sdkconfig.defaults, LittleFS mount in `app_main`) and is parked until Phase 03. When hardware time comes, that phase's steps are:
 
 1. Install ESP-IDF v5.x (`firmware/README.md` has the exact commands), `idf.py set-target esp32s3`
 2. First `idf.py build flash monitor` — expect "littlefs mounted" and the heartbeat log
 3. Get OpenOCD + GDB attached over built-in USB-JTAG, set a breakpoint in `app_main`, confirm it hits
-4. SoftAP up with a fixed SSID + NimBLE advertising
-5. Phone sees `lokalgrid` in its WiFi list and in nRF Connect. Done.
+4. SoftAP up with a fixed SSID + NimBLE advertising; phone sees `lokalgrid` in its WiFi list and in nRF Connect
+5. Point the app's WebSocket at the real SoftAP; build the BLE GATT path against the real board (the one thing the mock couldn't give you)
 
-**Then:** Phase 02 (minimal Android app, dot on the map), and keep the build log going.
+**Then:** Phases 04+ on real hardware, and keep the build log going throughout.
 
 ### Adjacent projects deliberately parked
 

@@ -419,8 +419,8 @@ storage    , data, littlefs,       , 0x2C0000   <i>// ~2.8 MB: logs + web assets
     <p>Two OTA slots is not optional on a device several people depend on — a bad flash must roll back rather than brick.</p>
 
     <h4>sdkconfig settings that actually matter</h4>
-<pre>CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3      <i>// default is 1; this is the multi-client switch</i>
-CONFIG_ESP_WIFI_SOFTAP_MAX_STA=4        <i>// 3 clients + headroom for a rejoin</i>
+<pre>CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      <i>// default is 1; 9 is NimBLE's hard ceiling — the multi-client switch</i>
+CONFIG_ESP_WIFI_SOFTAP_MAX_STA=10       <i>// ESP-IDF max; 9 clients + headroom for a rejoin</i>
 CONFIG_SPIRAM_MODE_OCT=y                <i>// the S3 module is octal PSRAM</i>
 CONFIG_PM_ENABLE=y                      <i>// dynamic frequency scaling</i>
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     <i>// the single biggest idle-power win</i>
@@ -614,7 +614,8 @@ crc16 CCITT over seq + len + payload</pre>
     <div class="note bad"><b>What the AP costs you beyond power.</b> Android flags a network with no internet route and may quietly fall back to mobile data mid-session — the app must bind its sockets to the WiFi <code>Network</code> object rather than assuming the route stays. And One UI's battery management will kill background work silently, which is why the app's BLE sync runs in a foreground service and BLE stays up underneath the AP.</div>
 
     <h3>Multi-client arbitration</h3>
-    <p>This is the part that does not exist in a one-phone design, and it is where the real engineering lives. One radio, three clients, all wanting to talk.</p>
+    <p>This is the part that does not exist in a one-phone design, and it is where the real engineering lives. One radio, up to nine clients, all wanting to talk.</p>
+    <div class="note"><b>Client cap: hardware ceiling, not 3.</b> The cap was raised from 3 to the hardware ceiling on 2026-07-23. NimBLE tops out at <b>9</b> concurrent BLE connections (<code>CONFIG_BT_NIMBLE_MAX_CONNECTIONS</code>, max 9); WiFi SoftAP at 10 stations (<code>ESP_WIFI_SOFTAP_MAX_STA</code>). Each client holds both a BLE link and a WiFi station, so the effective cap is <b>9</b>; practical-stable is ~4–6 once per-client RAM and shared throughput are counted. The real bottleneck was never the socket count but LoRa airtime — 3 phones at 1 Hz already saturate the ~1 kbit/s link, so the scheduler below must generalise past N=3 and hand out decimated positions and honest queue reasons to everyone beyond the airtime budget.</div>
     <h4>Airtime scheduling</h4>
     <p>LoRa is the scarce resource. Three phones each queue a message against a link with a 1% duty-cycle budget, so the node needs a real scheduler rather than a queue:</p>
 <pre><b>Priority lanes</b>   0 emergency  → pre-empts everything, ignores fairness
@@ -632,7 +633,7 @@ crc16 CCITT over seq + len + payload</pre>
     <h4>Shared state, several readers</h4>
     <p>Every client needs the same message history and position set, but they attach and detach at different times. The node is the single authority; each client holds a cursor and pulls deltas from it.</p>
 <pre><b>struct</b> client {
-  <b>uint8_t</b>  id;            <i>// 0..2, assigned at pairing</i>
+  <b>uint8_t</b>  id;            <i>// 0..8, assigned at pairing</i>
   <b>uint32_t</b> msg_cursor;    <i>// last message seq delivered</i>
   <b>uint32_t</b> pos_cursor;    <i>// last position seq delivered</i>
   <b>uint32_t</b> airtime_credit;<i>// deficit round-robin, in ms</i>
@@ -884,6 +885,8 @@ epoch      u32     flags   u16     battery u8   hdop u8
     <p>Kotlin end to end: the app, the protocol/codec module, and the CLI all share one implementation. Live data over a WebSocket when the SoftAP is up — with the socket explicitly bound to the WiFi <code>Network</code> so Android's mobile-data fallback cannot steal the session — and BLE GATT always-on underneath for presence and background sync.</p>
     <div class="note"><b>Build a mock node on day one.</b> A ~200-line script that serves the same WebSocket protocol and replays a captured session. You then develop the entire app with the hardware unplugged and iterate in seconds instead of a flash cycle. BLE cannot be mocked this way — develop the GATT path against the real board, everything else against the mock. It is the highest-leverage 200 lines in the project.</div>
 
+    <div class="note"><b>Agentic tooling: Android CLI + Journeys (2026-07-23).</b> Google's agentic Android tools (<code>developer.android.com/tools/agents</code>) are the test/CI harness for the mock-first phases 01–02. The <b>Android CLI</b> gives terminal-driven, CI-friendly build/install/test — the "CI without hardware" goal. <b>Journeys</b> are natural-language UI validations ("open Map, confirm the accuracy ellipse renders; send a chat message, confirm it appears") run against the mock node — the concrete form of the instrumented-test row, board unplugged. <b>BLE caveat:</b> Journeys is UI validation and cannot exercise a real BLE GATT connection to the T-Beam; none of these tools touch the Phase 03 hardware path. BLE and the foreground-service background sync — the features the app exists for — are tested against the <b>real board</b>, never a Journey. A green Journeys run is not BLE coverage. (Parts were still rolling out at adoption — confirm the CLI installs on macOS first. It is a tool, not a competing agent host; Android Skills / app distribution is out of scope for a personal build.)</div>
+
     <h3>Stack</h3>
     <div class="tw"><table>
       <thead><tr><th>Concern</th><th>Choice</th><th>Reason</th></tr></thead>
@@ -980,38 +983,45 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
 
 <!-- ============ 11 ROADMAP ============ -->
 <section id="roadmap">
-  <div class="rail"><span class="no">11</span>Roadmap<p>Each phase de-risks the next. Resist reordering.</p></div>
+  <div class="rail"><span class="no">11</span>Roadmap<p>Mock-first: the app comes up before the hardware does.</p></div>
   <div class="body">
     <h2>Build order</h2>
-    <p>Reordered for a hobby build: the earliest possible moment where something visibly works, then depth afterwards. The original plan front-loaded a week of pure Kotlin with nothing to look at, which is exactly how a side project dies.</p>
+    <div class="note"><b>Restructured mock-first (2026-07-23).</b> The old order opened with hardware (blink, an SSID in a WiFi list). It now opens with the mock node and the app, because everything except the BLE GATT path can be built against the mock (section 08) — so a real dot moving on a real map lands in the first sitting or two with the T-Beam still boxed. Hardware enters at Phase 03, exactly where the mock can't follow: the BLE always-on layer and real radio/GNSS/power timing.</div>
+    <p>Still reordered for the earliest moment something visibly works — the change is <em>which</em> milestone comes first. A running app beats a blinking LED as a first thing to look at, and it keeps the same guarantee: no week of pure code with nothing on screen.</p>
+
+    <div class="phase"><div class="n">00</div><div>
+      <h4>Mock node + dummy data</h4>
+      <p>The section-08 day-one task, now literally day one. ~200 lines (Node.js or Ktor) serving the <b>same WebSocket protocol</b> the real node will, from a synthetic session with a replay mode, plus the codec golden vectors. No hardware, no ESP-IDF. The highest-leverage code in the project — it makes every phase below buildable on a weekday evening with the board unplugged.</p>
+      <em>one evening · unplugged development from here on</em>
+    </div></div>
 
     <div class="phase"><div class="n">01</div><div>
-      <h4>Blink, then be seen</h4>
-      <p>ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, LittleFS mounted, SoftAP with a fixed SSID plus BLE advertising — the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Nothing else.</p>
-      <em>one evening · the whole toolchain proven, and the debugger set up before you need it</em>
+      <h4>App against the mock: dot on the map</h4>
+      <p>Minimal Android app: connect to the mock's WebSocket, records rendered on a MapLibre map with an accuracy ellipse. Hand-write the codec in Kotlin (the C side arrives with the hardware) — no schema, no generation. Get the dot on the map, entirely against the mock.</p>
+      <em>one weekend · the first moment that feels like something, no hardware</em>
     </div></div>
 
     <div class="phase"><div class="n">02</div><div>
-      <h4>One phone, live position</h4>
-      <p>Minimal Android app: join the node's AP, NMEA parsed, pushed over a WebSocket, rendered on a MapLibre map with an accuracy ellipse. Hand-write the codec in C and Kotlin — no schema, no generation. Just get the dot on the map.</p>
-      <em>one weekend · the first moment that feels like something</em>
+      <h4>App against the mock: three phones, shared state</h4>
+      <p>Per-client cursors, message history, chat, everyone seeing everyone — driven by the mock replaying multiple clients. Chat is deliberately small: <b>one shared channel, text only</b> — no DMs, no channels, no media. The multi-client logic (cursors, admission reasons, a first cut of the scheduler) gets built and flood-tested here against fake data. Demoable, but not yet the <b>complete</b> thing — that needs the real node.</p>
+      <em>two weekends · the multi-client model, proven on the mock</em>
     </div></div>
 
     <div class="phase"><div class="n">03</div><div>
-      <h4>Three phones, shared state</h4>
-      <p>Per-client cursors, message history, chat, everyone seeing everyone. Chat is deliberately small: <b>one shared channel, text only</b> — no DMs, no channels, no media. One room mirrors the product (one node, one group in the field). This is the local island and it is a <b>complete project</b> — if you stop here you have built something real and learned the multi-client model.</p>
+      <h4>Hardware: real node, BLE for real</h4>
+      <p>Now the board comes out. ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, LittleFS mounted, SoftAP with a fixed SSID plus BLE advertising — the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: <b>point the app's WebSocket at the real SoftAP</b>, and <b>build the BLE GATT path against the real board</b> (BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes — three phones on a shared map, the local island. This is a <b>complete project</b>; stopping here is success.</p>
       <em>two weekends · <b>natural stopping point</b></em>
     </div></div>
 
     <div class="phase"><div class="n">04</div><div>
       <h4>Make it fight</h4>
-      <p>Now the interesting part. Deficit round-robin scheduling, priority lanes, admission control, backlog interleaving. Test it by writing a client that deliberately floods. This is the phase with the most transferable engineering in it.</p>
+      <p>Now the interesting part. Deficit round-robin scheduling, priority lanes, admission control, backlog interleaving — hardened against <b>real</b> airtime timing (the mock exercised the logic; only hardware exercises the clock). Test it by writing a client that deliberately floods. This is the phase with the most transferable engineering in it.</p>
       <em>two weekends · the reason to build this at all</em>
     </div></div>
 
     <div class="phase"><div class="n">05</div><div>
       <h4>Fix the drift</h4>
-      <p>By now the hand-written codec has bitten you at least once. <em>That</em> is when you introduce the schema and generate C and TypeScript from it, with shared golden vectors — because you will understand why it exists rather than taking my word for it.</p>
+      <p>By now the hand-written codec — C on the node, Kotlin in the app — has bitten you at least once. <em>That</em> is when you introduce the schema and generate C and Kotlin from it, with shared golden vectors — because you will understand why it exists rather than taking my word for it.</p>
       <em>one weekend · introduced when the pain is real, not before</em>
     </div></div>
 

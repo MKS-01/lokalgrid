@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Firmware skeleton exists under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`); ESP-IDF not yet installed on this machine. Next action is Phase 01 (section 7): toolchain install, USB-JTAG breakpoint working, SoftAP + BLE advertising up, phone sees the node. Repo: github.com/MKS-01/lokalgrid.
+The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is built against a mock node before the hardware comes out. Next action is **Phase 00** — the mock node (~200 lines serving the WebSocket protocol from a synthetic/replay session, plus codec golden vectors), then Phase 01 gets the dot on a MapLibre map against it. No hardware until **Phase 03**, where the toolchain, USB-JTAG breakpoint, SoftAP + BLE advertising, and the un-mockable BLE GATT path all land. The firmware skeleton under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`) is parked until then; ESP-IDF not yet installed on this machine. Repo: github.com/MKS-01/lokalgrid.
 
 ## Stack — already decided, do not relitigate
 
