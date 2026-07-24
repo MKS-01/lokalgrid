@@ -1,7 +1,6 @@
 {
-  "note": "Golden track-record vectors. 32-byte records, little-endian, CRC-32 (zlib/IEEE) trailer. Both the C firmware and the Kotlin app must reproduce these hex strings from these fields.",
+  "note": "Golden track-record vectors. 32-byte records, little-endian, CRC-32 (zlib/IEEE) trailer. Both the C firmware and the Kotlin app must reproduce these hex strings from these fields. Regenerating must leave this file byte-identical unless the wire format changed — no timestamp, so a git diff means the format moved.",
   "recordBytes": 32,
-  "generated": "2026-07-23T18:00:17.810Z",
   "vectors": [
     {
       "name": "nominal_3d_fix",
