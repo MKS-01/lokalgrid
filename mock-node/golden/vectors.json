@@ -1,0 +1,101 @@
+{
+  "note": "Golden track-record vectors. 32-byte records, little-endian, CRC-32 (zlib/IEEE) trailer. Both the C firmware and the Kotlin app must reproduce these hex strings from these fields. Regenerating must leave this file byte-identical unless the wire format changed — no timestamp, so a git diff means the format moved.",
+  "recordBytes": 32,
+  "vectors": [
+    {
+      "name": "nominal_3d_fix",
+      "hex": "00d2496b204fbb0710ff3f2e980348268c0039300b09571b07000100ecb50cd6",
+      "fields": {
+        "epoch": 1800000000,
+        "lat_e7": 129716000,
+        "lon_e7": 775946000,
+        "alt": 920,
+        "baro": 9800,
+        "spd": 140,
+        "hdg": 12345,
+        "sv": 11,
+        "hd": 9,
+        "bat": 87,
+        "tmp": 27,
+        "flags": 65543
+      },
+      "crc32": 3591157228
+    },
+    {
+      "name": "trip_start_stationary",
+      "hex": "00d2496b204fbb0710ff3f2e9903008000000000081564800b000000662b6b3f",
+      "fields": {
+        "epoch": 1800000000,
+        "lat_e7": 129716000,
+        "lon_e7": 775946000,
+        "alt": 921,
+        "baro": -32768,
+        "spd": 0,
+        "hdg": 0,
+        "sv": 8,
+        "hd": 21,
+        "bat": 100,
+        "tmp": -128,
+        "flags": 11
+      },
+      "crc32": 1063988070
+    },
+    {
+      "name": "two_d_fix_no_time",
+      "hex": "00000000204fbb0710ff3f2e0000008000000000032d401e000002007a2a9f43",
+      "fields": {
+        "epoch": 0,
+        "lat_e7": 129716000,
+        "lon_e7": 775946000,
+        "alt": 0,
+        "baro": -32768,
+        "spd": 0,
+        "hdg": 0,
+        "sv": 3,
+        "hd": 45,
+        "bat": 64,
+        "tmp": 30,
+        "flags": 131072
+      },
+      "crc32": 1134504570
+    },
+    {
+      "name": "southern_western_hemisphere",
+      "hex": "f4d3496b0008d0eb48b5205af4ff9227c4099f8c0c0705f82300ffffb6567539",
+      "fields": {
+        "epoch": 1800000500,
+        "lat_e7": -338688000,
+        "lon_e7": 1512093000,
+        "alt": -12,
+        "baro": 10130,
+        "spd": 2500,
+        "hdg": 35999,
+        "sv": 12,
+        "hd": 7,
+        "bat": 5,
+        "tmp": -8,
+        "flags": 4294901795
+      },
+      "crc32": 963991222
+    },
+    {
+      "name": "field_extremes",
+      "hex": "ffffffff00e9a435002eb694ff7f0080ffffffffffffff7fffffffffaaa6e993",
+      "fields": {
+        "epoch": 4294967295,
+        "lat_e7": 900000000,
+        "lon_e7": -1800000000,
+        "alt": 32767,
+        "baro": -32768,
+        "spd": 65535,
+        "hdg": 65535,
+        "sv": 255,
+        "hd": 255,
+        "bat": 255,
+        "tmp": 127,
+        "flags": 4294967295
+      },
+      "crc32": 2481563306
+    }
+  ]
+}

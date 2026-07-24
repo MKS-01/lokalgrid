@@ -1,0 +1,4 @@
+<resources>
+    <!-- Window theme only; the real theming happens in Compose (Material 3). -->
+    <style name="Theme.Lokalgrid" parent="android:Theme.Material.NoActionBar" />
+</resources>
