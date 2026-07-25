@@ -23,6 +23,19 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_URL, DEFAULT_URL) ?: DEFAULT_URL
         set(v) = sp.edit().putString(KEY_URL, v.trim()).apply()
 
+    /**
+     * Last position seq this client has received, per node. Survives a restart so
+     * reopening the app resumes a delta instead of re-streaming an hour — and it
+     * is keyed by URL because a cursor means nothing on a different node.
+     */
+    fun posCursor(url: String): Long = sp.getLong(cursorKey(url), 0)
+
+    fun setPosCursor(url: String, seq: Long) {
+        sp.edit().putLong(cursorKey(url), seq).apply()
+    }
+
+    private fun cursorKey(url: String) = "pos_cursor::${url.trim()}"
+
     companion object {
         private const val KEY_ONBOARDED = "onboarded"
         private const val KEY_URL = "node_url"

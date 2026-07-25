@@ -8,6 +8,7 @@ import dev.lokalgrid.protocol.Lane
 import dev.lokalgrid.protocol.NodeFrame
 import dev.lokalgrid.protocol.RosterEntry
 import dev.lokalgrid.protocol.TrackRecord
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,27 +65,84 @@ data class LiveState(
     val config: NodeFrame.Config? = null,            // the config in force on the node
     val lastConfigResult: NodeFrame.ConfigResult? = null,
     val stats: NodeFrame.Stats? = null,              // airtime accounting from the node
+    // position cursor + backlog resume
+    val posCursor: Long = 0,          // last position seq we have; ours to state, not guess
+    val posHeld: Int = 0,             // how many the node still holds
+    val posOldest: Long = 0,
+    val catchingUp: Boolean = false,
+    val backlogTotal: Int = 0,        // what the node said it owed us on resume
+    val backlogRemaining: Int = 0,
+    val lostBefore: Int = 0,          // records that aged out before we came back
+    val gapReason: String? = null,
+    val track: List<TrackRecord> = emptyList(),  // observed history, oldest first
 ) {
     val clientCount: Int get() = if (roster.isNotEmpty()) roster.size else if (connected) 1 else 0
+
+    /**
+     * The newest position seq we can *prove* the node has: whatever its last stats
+     * frame said, or our own cursor if we have received further since. Stats tick
+     * every few seconds while the cursor advances every second, so taking the node
+     * figure alone would briefly render "you have seq 17, the node holds 14" —
+     * two true numbers that read as a contradiction.
+     */
+    val posNewestKnown: Long get() = maxOf(stats?.posNewest ?: 0L, posCursor)
 
     /** Your messages still waiting on the link out — what the outbound panel shows. */
     val outbox: List<ChatEntry> get() = messages.filter { it.mine && !it.relayed && it.error == null }
 }
 
-class LiveViewModel(private val url: String = DEFAULT_URL) : ViewModel() {
+/** How much observed track to keep in memory for the map. Room replaces this later (§6). */
+private const val TRACK_KEEP = 1500
+
+class LiveViewModel(
+    private val url: String = DEFAULT_URL,
+    private val savedCursor: Long = 0,
+    private val onCursor: (Long) -> Unit = {},
+) : ViewModel() {
 
     private val client = NodeClient(url)
-    private val _state = MutableStateFlow(LiveState(url = url))
+    private val _state = MutableStateFlow(LiveState(url = url, posCursor = savedCursor))
     val state: StateFlow<LiveState> = _state.asStateFlow()
 
     private var msgCounter = 0
 
+    private var lastSaved = savedCursor
+    private var link: Job? = null
+
     init {
-        viewModelScope.launch {
+        connect()
+    }
+
+    private fun connect() {
+        link?.cancel()
+        link = viewModelScope.launch {
             client.events().collect { ev ->
-                _state.value = reduce(_state.value, ev)
+                val next = reduce(_state.value, ev)
+                _state.value = next
+                // Persist occasionally rather than every record: a killed app should
+                // resume a few seconds behind, not from zero. The exact figure is
+                // re-stated to the node on reconnect, which corrects any drift.
+                if (next.posCursor - lastSaved >= 30) {
+                    lastSaved = next.posCursor
+                    onCursor(next.posCursor)
+                }
             }
         }
+    }
+
+    /**
+     * Drop the socket and open a new one. The cursor survives, so this resumes a
+     * delta rather than starting over — reconnecting is cheap by design, which is
+     * the whole reason the app does not need to gate itself behind a live link.
+     */
+    fun reconnect() {
+        _state.value = _state.value.copy(connected = false, status = "reconnecting to $url…")
+        connect()
+    }
+
+    override fun onCleared() {
+        onCursor(_state.value.posCursor)
+        super.onCleared()
     }
 
     /**
@@ -122,9 +180,14 @@ class LiveViewModel(private val url: String = DEFAULT_URL) : ViewModel() {
     /** Restart the mock's synthetic track. Phase 03 replaces this with a real one. */
     fun resetTrack() = client.send(ClientFrame.Reset)
 
-    /** Ask for the chat delta from our own cursor — the client owns its cursor (§3). */
+    /**
+     * State our cursors and ask for the delta. The client is authoritative about
+     * what it has received (§3), so this is the app *telling* the node where it
+     * got to — chat and positions separately — never the node assuming.
+     */
     fun resync() {
-        client.send(ClientFrame.Cursor(_state.value.messages.maxOfOrNull { it.seq } ?: 0))
+        val s = _state.value
+        client.send(ClientFrame.Cursor(s.messages.maxOfOrNull { it.seq } ?: 0, s.posCursor))
     }
 
     /**
@@ -155,20 +218,61 @@ class LiveViewModel(private val url: String = DEFAULT_URL) : ViewModel() {
     }
 
     private fun reduce(s: LiveState, ev: NodeClient.Event): LiveState = when (ev) {
-        is NodeClient.Event.Fix -> s.copy(latest = ev.record, fixCount = s.fixCount + 1)
+        // Each record advances our cursor by exactly one: the socket is ordered
+        // and lossless, so counting is safe *between* the node's explicit sync
+        // points, and a backlogChunk/Done frame overrides the count rather than
+        // adding to it. Any drift is resolved in the node's favour.
+        is NodeClient.Event.Fix -> s.copy(
+            latest = ev.record,
+            fixCount = s.fixCount + 1,
+            posCursor = s.posCursor + 1,
+            backlogRemaining = (s.backlogRemaining - 1).coerceAtLeast(0),
+            track = (s.track + ev.record).takeLast(TRACK_KEEP),
+        )
         is NodeClient.Event.Dropped -> s.copy(dropped = s.dropped + 1, lastDrop = ev.reason)
         is NodeClient.Event.Status -> s.copy(connected = ev.connected, status = ev.detail)
         is NodeClient.Event.Frame -> reduceFrame(s, ev.frame)
     }
 
     private fun reduceFrame(s: LiveState, f: NodeFrame): LiveState = when (f) {
-        is NodeFrame.Hello -> s.copy(
-            status = "node ${f.deviceId} · ${f.mode} · ${f.hz} Hz · proto ${f.proto}",
-            selfId = f.youId,
-            selfName = f.youName,
-            cap = f.cap,
-            duty = f.duty,
+        is NodeFrame.Hello -> {
+            // The node has just told us what it holds; state our cursors straight
+            // back so the resume happens before anything renders as "current".
+            viewModelScope.launch { resync() }
+            s.copy(
+                status = "node ${f.deviceId} · ${f.mode} · ${f.hz} Hz · proto ${f.proto}",
+                selfId = f.youId,
+                selfName = f.youName,
+                cap = f.cap,
+                duty = f.duty,
+                posHeld = f.posHeld,
+                posOldest = f.posOldest,
+            )
+        }
+
+        // What we are owed, stated before it arrives. `lost` is the honest part:
+        // records that aged out of the node before we came back, which the map
+        // must show as a gap rather than draw a straight line through.
+        is NodeFrame.Backlog -> s.copy(
+            posCursor = (f.from - 1).coerceAtLeast(0),
+            catchingUp = f.count > 0,
+            backlogTotal = f.count,
+            backlogRemaining = f.count,
+            lostBefore = f.lost,
+            gapReason = f.reason,
+            posHeld = f.held,
+            posOldest = f.oldest,
+            // A gap means the track we hold is no longer continuous with what is
+            // arriving — drop it rather than joining two unrelated stretches.
+            track = if (f.lost > 0) emptyList() else s.track,
         )
+
+        is NodeFrame.BacklogChunk -> s.copy(posCursor = f.cursor, backlogRemaining = f.remaining)
+
+        is NodeFrame.BacklogDone -> {
+            onCursor(f.cursor)
+            s.copy(posCursor = f.cursor, catchingUp = false, backlogRemaining = 0)
+        }
 
         is NodeFrame.Roster -> s.copy(
             roster = f.clients,
@@ -245,7 +349,11 @@ class LiveViewModel(private val url: String = DEFAULT_URL) : ViewModel() {
 
         is NodeFrame.Config -> s.copy(config = f)
         is NodeFrame.ConfigResult -> s.copy(lastConfigResult = f)
-        is NodeFrame.Stats -> s.copy(stats = f)
+        is NodeFrame.Stats -> s.copy(
+            stats = f,
+            posHeld = if (f.posHeld > 0) f.posHeld else s.posHeld,
+            posOldest = if (f.posOldest > 0) f.posOldest else s.posOldest,
+        )
 
         is NodeFrame.Unknown -> s.copy(nodeNotice = "unknown frame \"${f.type}\" — node is newer than this app")
         is NodeFrame.Malformed -> s.copy(dropped = s.dropped + 1, lastDrop = "control frame: ${f.error}")

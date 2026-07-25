@@ -48,12 +48,14 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import com.google.gson.JsonObject
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
+import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 
 private const val SRC_DOT = "lg-dot"
 private const val SRC_ACC = "lg-acc"
 private const val SRC_PEERS_DOT = "lg-peers-dot"
 private const val SRC_PEERS_ACC = "lg-peers-acc"
+private const val SRC_TRACK = "lg-track"
 
 /** Keyless raster basemaps — no API key, no quota. The offline PMTiles basemap
  *  (§6) replaces these later; for now the user can switch source at runtime. */
@@ -83,14 +85,39 @@ private class MapHolder {
     var acc: GeoJsonSource? = null
     var peersDot: GeoJsonSource? = null
     var peersAcc: GeoJsonSource? = null
+    var track: GeoJsonSource? = null
     var centeredOnce = false
 }
 
 /** Add the position dot + HDOP accuracy ring on top of a freshly-set style.
  *  Called on first load and again after every basemap switch (setStyle clears
  *  custom layers). Immediately pushes the latest fix so the dot never blinks out. */
-private fun applyStyle(map: MapLibreMap, b: Basemap, holder: MapHolder, latest: TrackRecord?, peers: List<Peer>) {
+private fun applyStyle(
+    map: MapLibreMap,
+    b: Basemap,
+    holder: MapHolder,
+    latest: TrackRecord?,
+    peers: List<Peer>,
+    track: List<TrackRecord>,
+) {
     map.setStyle(Style.Builder().fromJson(styleJson(b))) { style ->
+        // The observed track, under everything else. This is what the position
+        // backlog is *for*: on resume the node streams the history it holds, and
+        // it lands here as a line instead of a counter nobody can check.
+        val trackSrc = GeoJsonSource(SRC_TRACK)
+        style.addSource(trackSrc)
+        style.addLayer(
+            LineLayer("lg-track-line", SRC_TRACK).withProperties(
+                PropertyFactory.lineColor(Color.parseColor("#4EC2A6")),
+                PropertyFactory.lineWidth(2f),
+                PropertyFactory.lineOpacity(0.55f),
+                PropertyFactory.lineCap("round"),
+                PropertyFactory.lineJoin("round")
+            )
+        )
+        holder.track = trackSrc
+        pushTrack(holder, track)
+
         // Peers first, so your own dot always draws on top of them.
         val peersAcc = GeoJsonSource(SRC_PEERS_ACC)
         val peersDot = GeoJsonSource(SRC_PEERS_DOT)
@@ -150,6 +177,7 @@ private fun applyStyle(map: MapLibreMap, b: Basemap, holder: MapHolder, latest: 
         holder.acc = acc
         latest?.let { pushFix(holder, it) }
         pushPeers(holder, peers)
+        pushTrack(holder, track)
     }
 }
 
@@ -167,10 +195,26 @@ private fun pushPeers(holder: MapHolder, peers: List<Peer>) {
     }))
 }
 
+/** The observed history as one line. Two points minimum — a single fix is a dot,
+ *  and drawing a "track" through it would imply movement nobody observed. */
+private fun pushTrack(holder: MapHolder, track: List<TrackRecord>) {
+    val src = holder.track ?: return
+    if (track.size < 2) {
+        src.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()))
+        return
+    }
+    src.setGeoJson(LineString.fromLngLats(track.map { Point.fromLngLat(it.lonDeg, it.latDeg) }))
+}
+
 private fun colorProp(p: Peer) = JsonObject().apply { addProperty("color", p.colorHex) }
 
 @Composable
-fun MapLibreView(latest: TrackRecord?, peers: List<Peer> = emptyList(), modifier: Modifier = Modifier) {
+fun MapLibreView(
+    latest: TrackRecord?,
+    peers: List<Peer> = emptyList(),
+    track: List<TrackRecord> = emptyList(),
+    modifier: Modifier = Modifier,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val holder = remember { MapHolder() }
     var basemap by remember { mutableStateOf(BASEMAPS.first()) }
@@ -212,13 +256,14 @@ fun MapLibreView(latest: TrackRecord?, peers: List<Peer> = emptyList(), modifier
                         // hide the built-in +/- since we provide our own
                         isCompassEnabled = true
                     }
-                    applyStyle(map, basemap, holder, latest, peers)
+                    applyStyle(map, basemap, holder, latest, peers, track)
                 }
                 mapView
             },
             modifier = Modifier.fillMaxSize(),
             update = {
                 pushPeers(holder, peers)
+                pushTrack(holder, track)
                 val r = latest ?: return@AndroidView
                 pushFix(holder, r)
                 val map = holder.map ?: return@AndroidView
@@ -238,7 +283,7 @@ fun MapLibreView(latest: TrackRecord?, peers: List<Peer> = emptyList(), modifier
             for (b in BASEMAPS) {
                 StyleChip(b.name, active = b.name == basemap.name) {
                     basemap = b
-                    holder.map?.let { applyStyle(it, b, holder, latest, peers) }
+                    holder.map?.let { applyStyle(it, b, holder, latest, peers, track) }
                 }
             }
         }

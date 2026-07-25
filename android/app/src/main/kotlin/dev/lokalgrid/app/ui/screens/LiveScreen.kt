@@ -86,6 +86,25 @@ fun LiveScreen(
         InfoRow("battery", "${r.bat}%")
         InfoRow("charging", if (r.charging) "yes" else "no")
         InfoRow("last fix", "#${r.seqLo} · ${state.fixCount} received" + if (state.dropped > 0) " · ${state.dropped} dropped" else "")
+        // Resume state. The cursor is ours to state, the log is the node's to own
+        // (§3) — so both numbers are shown, and a gap is named rather than drawn
+        // through as if the track were continuous.
+        SectionLabel("history")
+        InfoRow("your cursor", "seq ${state.posCursor}")
+        InfoRow("node log", "seq ${state.posOldest} … ${state.posNewestKnown} · ${state.posHeld} held")
+        if (state.catchingUp) {
+            InfoRow("catching up") {
+                Pill("${state.backlogRemaining} of ${state.backlogTotal} left", PillKind.NEUTRAL)
+            }
+        } else if (state.backlogTotal > 0) {
+            InfoRow("resumed") { Pill("${state.backlogTotal} fixes replayed", PillKind.OK) }
+        }
+        state.gapReason?.let {
+            InfoRow("gap") { Pill("${state.lostBefore} lost", PillKind.WARN) }
+            InfoRow("why", it)
+        }
+        InfoRow("track held", "${state.track.size} points")
+
         state.stats?.let { st ->
             InfoRow("uptime", "${st.uptimeS / 60} min")
             InfoRow("link out", "${"%.2f".format(st.dutyActualPct)}% of ${"%.1f".format(state.duty * 100)}% ceiling")

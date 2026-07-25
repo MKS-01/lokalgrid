@@ -1,5 +1,21 @@
 # Build log
 
+## 2026-07-25 (later) — cursors, backlog resume, and a Link screen instead of a connect gate
+
+**Tried:** the two Phase 02 items left after the forward flow — per-client position cursors and backlog resume — plus a proper README, plus the connection surface the app had been missing.
+
+**Cursors and resume.** Every position is now appended to a `PositionLog` and given a monotonic seq *before* it is broadcast: the log is what exists, so a record a client missed can always be fetched by number. On connect the client states its own cursor (`cursor {seq, posSeq}` — chat and positions advance independently, so they carry separate cursors in one frame) and the node answers with a `backlog` frame saying exactly what it owes **and how many records aged out of the log first**. Catch-up streams in bounded chunks, one per 250 ms, interleaved with live traffic, so a client returning after an hour never blocks the ones that are live (§3). The cursor persists in SharedPreferences keyed by node URL — a cursor means nothing on a different node.
+
+Verified on the emulator against the live mock, not just in tests: killed the app at seq 60, let the node run 30 s, relaunched — `[<] echo resumes at 60 — 49 behind` → `caught up at seq 109`, with the device holding `pos_cursor::ws://10.0.2.2:8787 = 109`. The recovered history now draws as a track line on the map, which is what makes the backlog checkable rather than a counter you have to trust.
+
+**Two honesty bugs, both the same shape: numbers on screen that contradict each other.** (1) The Live tab showed "your cursor seq 371" beside "node holds 344 fixes from seq 1" — the log figures came from `hello`, a connect-time snapshot, while the cursor kept moving. The node now restates them in its periodic `stats`. (2) That still left a ≤5 s lag reading as a contradiction at 1 Hz, so the client now derives the newest seq it can *prove* exists as `max(node's last figure, own cursor)` — receiving a record is proof the node had it. Both true numbers; the display had been inviting the wrong conclusion.
+
+**Link screen, not a connect gate.** Asked which shape this should take and the answer was no gate. So: tap the status bar, get an ordered flow — 1 permissions · 2 wifi/websocket · 3 ble · 4 session — each with a state (`ok` / `needs you` / `working` / `phase 03`), the relevant action, and the resume state at the bottom. It opens over the content with the tab bar still live, so it is not a sixth tab (§6) and it never blocks the app. That last part is the design point: the client owns its cursor and can resume a delta whenever the link returns, so gating on a live connection would hide exactly the cached track, chat and roster the resume machinery exists to preserve. Step 3 says BLE scan/pair arrives in Phase 03 with the button disabled — a scan list that can never find anything would be a fake feature.
+
+**Also:** the root README was still a one-line stub from the rename. It is now the actual front page — what the thing is, what works today, how to run it, the layout, the wire format, the two hardware rules, and the callsign convention.
+
+**Next:** the phone's own GPS behind "share my position" (it still offers the node's fix), Room for the track itself (the cursor persists, the history does not), then two clients side by side with one deliberately flooding. 37 mock tests, 26 Kotlin. No hardware; silkscreen band check still open, still not blocking.
+
 ## 2026-07-25 — the forward flow: chat, and the airtime queue made visible
 
 **Tried:** Everything so far pointed one way — the node talks, the app listens. This session opened the other direction. Chat is the first user of it, and it is now wired end to end against the mock.

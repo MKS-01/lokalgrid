@@ -80,6 +80,7 @@ action has a visible, node-authored answer:
 | **Chat** | send · send as emergency (lane 0) | `seq` echo, then live queue state until `relayed` |
 | **Clients** | rename on the roster | roster + per-client airtime meters, duty used, queue depth |
 | **Config** | stage edits, write explicitly | applied and refused, key by key, with reasons |
+| **Link** (tap the status bar) | grant permissions, reconnect, change node | an ordered flow: permissions · wifi · ble · session |
 
 The Chat bubble appears immediately as **pending** (an optimistic echo, not a
 claim), becomes `seq N` when the node acknowledges it, then carries a live line
@@ -93,6 +94,17 @@ why — they are enforced in firmware, not offered as settings (§2).
 Run `npm start -- --ghosts 2` in `mock-node/` to put synthetic peers on the map
 with a single phone; `CAP=2 npm start` makes the node-full refusal visible.
 
+## Resume, not restart
+
+The app keeps a position cursor per node and states it on every connect, so
+reopening after an hour fetches a delta instead of re-streaming everything. The
+node answers with what it owes and what it lost; the recovered history draws as a
+track line on the map, and the Live tab shows cursor, log range and any gap.
+
+This is why the app is not gated behind a live connection: the Link screen (tap
+the status bar) shows connection state as a flow, but every tab stays readable
+with the node unreachable, and reconnecting resumes from the cursor.
+
 ## Not here yet
 
 - **BLE** — permissions and onboarding exist; the GATT connection itself is
@@ -102,6 +114,7 @@ with a single phone; `CAP=2 npm start` makes the node-full refusal visible.
   service class that doesn't exist yet.
 - **Real phone GPS** — "share my position" currently offers the node's own fix.
   Wiring the handset's location needs a runtime permission and is a separate step.
-- **Per-client position cursors, backlog resume** — rest of Phase 02.
+- **Room** — the position cursor persists in SharedPreferences, keyed by node URL;
+  the track itself is still in memory only.
 - Offline PMTiles basemap — Phase 01 uses the keyless MapLibre demo style.
 - One UI battery-exemption onboarding (target: Galaxy S25) — before background sync.

@@ -34,13 +34,16 @@ Node → client (text):
 | `peerSkip` | `reason, movedM` | your position was decimated, and by how much |
 | `config` | `values, locked, editable` | the config in force, and what it refuses to make settable |
 | `configResult` | `applied, refused[{key,reason}]` | what a write did — both halves |
-| `stats` | `uptimeS, queueDepth, airtimeMs, dutyActualPct, dutyUsedPct, clients[]` | airtime accounting |
+| `stats` | `uptimeS, queueDepth, dutyUsedPct, clients[], posOldest/Newest/Held` | airtime accounting + what the log holds |
+| `backlog` | `from, to, count, lost, reason, oldest, newest, held` | what you are owed on resume, stated before it is sent |
+| `backlogChunk` | `cursor, remaining` | progress while catching up |
+| `backlogDone` | `cursor, live` | you are current; this cursor is authoritative |
 | `rejected` | `scope, msgId?, reason` | admission control said no, with a reason |
 
 Node → client (binary): exactly 32 bytes = one track record (§4).
 
 Client → node (text): `send {msgId, text, lane?}` · `name {name}` ·
-`pos {latE7, lonE7, hd, epoch}` · `config {patch}` · `cursor {seq}` · `reset {}`.
+`pos {latE7, lonE7, hd, epoch}` · `config {patch}` · `cursor {seq, posSeq}` · `reset {}`.
 Lane 2 is a normal message, lane 0 is emergency and pre-empts everything (§3).
 
 Every one of those has a visible answer: a chat gets a node-assigned `seq`, a
@@ -80,8 +83,19 @@ the Map tab has company with a single phone on the desk. They take roster slots
 with transport `ghost`, and the app labels them — a mock peer must never be
 passed off as a real client.
 
-Backlog beyond the in-memory chat history, and per-client position cursors, are
-still to come.
+### Cursors and resume
+
+Every position is appended to a log and given a monotonic seq *before* it is
+broadcast, so a record a client missed can always be fetched again by number. On
+connect the client states its own cursor — `cursor {seq, posSeq}`, chat and
+positions separately — and the node answers with a `backlog` frame saying exactly
+what it owes, **including how many records aged out of the log first**. A gap is
+named, never drawn through as continuous track.
+
+The catch-up then streams in bounded chunks (`BACKLOG_CHUNK`, default 60, one per
+250 ms) so a client returning after an hour does not block the ones that are live
+(§3). `HISTORY=3600` sets how many records the log keeps — one hour at 1 Hz;
+lower it (`HISTORY=50`) to exercise the aged-out path.
 
 ## Codec + golden vectors
 

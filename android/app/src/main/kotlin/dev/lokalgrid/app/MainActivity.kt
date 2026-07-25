@@ -73,7 +73,8 @@ class MainActivity : ComponentActivity() {
                         // opens here, *under* the boot screen — so the splash is
                         // covering real work rather than padding a timer.
                         key(url) {
-                            val vm: LiveViewModel = viewModel(factory = LiveViewModelFactory(url))
+                            val vm: LiveViewModel =
+                                viewModel(factory = LiveViewModelFactory(url, prefs))
                             val state by vm.state.collectAsStateWithLifecycle()
 
                             // Hold the boot screen until the first connection attempt
@@ -107,6 +108,7 @@ class MainActivity : ComponentActivity() {
                                         prefs.onboarded = false
                                         route = Route.ONBOARDING
                                     },
+                                    onReconnect = vm::reconnect,
                                 )
                             }
                         }
@@ -117,8 +119,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Hands the chosen node URL to the ViewModel. */
-private class LiveViewModelFactory(private val url: String) : ViewModelProvider.Factory {
+/**
+ * Hands the chosen node URL to the ViewModel, along with the position cursor
+ * saved for *that* node — so reopening the app resumes a delta rather than
+ * re-streaming everything, and switching nodes cannot carry a cursor across.
+ */
+private class LiveViewModelFactory(
+    private val url: String,
+    private val prefs: Prefs,
+) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = LiveViewModel(url) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = LiveViewModel(
+        url = url,
+        savedCursor = prefs.posCursor(url),
+        onCursor = { prefs.setPosCursor(url, it) },
+    ) as T
 }

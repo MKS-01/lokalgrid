@@ -49,9 +49,11 @@ fun AppShell(
     onResetTrack: () -> Unit = {},
     onWriteConfig: (Map<String, String>) -> Unit = {},
     onReopenSetup: () -> Unit = {},
+    onReconnect: () -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var showDiag by remember { mutableStateOf(false) }
+    var showLink by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -59,7 +61,9 @@ fun AppShell(
             .background(Lg.Paper)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        SysBar(state)
+        // The status bar is the way in to the Link screen — connection state is
+        // where you'd tap to ask about connection state.
+        SysBar(state) { showLink = !showLink }
         AppBar(tab, state, onLongPressTitle = { showDiag = !showDiag })
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
@@ -69,16 +73,33 @@ fun AppShell(
                 Tab.CLIENTS -> ClientsScreen(state, onRename)
                 Tab.CONFIG -> ConfigScreen(state, onWriteConfig, onReopenSetup)
             }
+            // Both overlays cover the content only — the tab bar stays live, so
+            // the app is never blocked behind a connection screen.
+            if (showLink) {
+                LinkScreen(
+                    state = state,
+                    onReconnect = onReconnect,
+                    onChangeNode = { showLink = false; onReopenSetup() },
+                    onClose = { showLink = false },
+                )
+            }
             if (showDiag) DiagnosticsOverlay(state) { showDiag = false }
         }
-        TabBar(tab) { tab = it }
+        TabBar(tab) {
+            tab = it
+            showLink = false
+        }
     }
 }
 
 @Composable
-private fun SysBar(state: LiveState) {
+private fun SysBar(state: LiveState, onTap: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Lg.Deep).padding(horizontal = 12.dp, vertical = 5.dp),
+        Modifier
+            .fillMaxWidth()
+            .background(Lg.Deep)
+            .clickable(onClick = onTap)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
@@ -86,8 +107,8 @@ private fun SysBar(state: LiveState) {
             color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp
         )
         Text(
-            if (state.connected) "${state.clientCount} client${if (state.clientCount == 1) "" else "s"}" else "offline",
-            color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp
+            (if (state.connected) "${state.clientCount} client${if (state.clientCount == 1) "" else "s"}" else "offline") + "  ⌃link",
+            color = if (state.connected) Lg.Ink3 else Lg.Warn, fontFamily = Mono, fontSize = 10.sp
         )
     }
 }
@@ -115,8 +136,11 @@ private fun AppBar(tab: Tab, state: LiveState, onLongPressTitle: () -> Unit) {
             modifier = Modifier.combinedClickable(onClick = {}, onLongClick = onLongPressTitle)
         )
         when (tab) {
-            Tab.LIVE, Tab.MAP ->
-                if (state.connected) Pill("wifi", PillKind.OK) else Pill("connecting", PillKind.NEUTRAL)
+            Tab.LIVE, Tab.MAP -> when {
+                state.catchingUp -> Pill("catching up · ${state.backlogRemaining}", PillKind.LORA)
+                state.connected -> Pill("wifi", PillKind.OK)
+                else -> Pill("connecting", PillKind.NEUTRAL)
+            }
             Tab.CHAT -> {
                 val waiting = state.outbox.count { it.relayReason != null && !it.relayed }
                 if (waiting > 0) Pill("$waiting on airtime", PillKind.LORA) else Pill("lane 2", PillKind.NEUTRAL)
@@ -183,6 +207,9 @@ private fun DiagnosticsOverlay(state: LiveState, onClose: () -> Unit) {
         InfoRow("clients", "${state.clientCount} of ${state.cap}")
         InfoRow("duty cycle", "${"%.2f".format(state.duty * 100)}%")
         InfoRow("messages", state.messages.size.toString())
+        InfoRow("position cursor", "seq ${state.posCursor} of ${state.posOldest}+${state.posHeld}")
+        InfoRow("backlog", if (state.catchingUp) "${state.backlogRemaining} left" else "current")
+        if (state.lostBefore > 0) InfoRow("aged out", "${state.lostBefore} before resume")
         InfoRow("waiting on airtime", state.outbox.count { !it.relayed }.toString())
         state.nodeNotice?.let { InfoRow("node said", it) }
         val r = state.latest

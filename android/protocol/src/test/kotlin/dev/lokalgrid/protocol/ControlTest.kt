@@ -187,8 +187,64 @@ class ControlTest {
     }
 
     @Test
+    fun `hello states what the position log holds, so a cursor can be judged before asking`() {
+        val f = Control.decode(
+            """{"type":"hello","proto":2,"deviceId":41000,"recordBytes":32,"hz":1,"mode":"synthetic",
+               "you":{"id":0,"name":"alpha"},"cap":9,"duty":0.01,
+               "posOldest":141,"posNewest":3740,"posHeld":3600}"""
+        ) as NodeFrame.Hello
+        assertEquals(141L, f.posOldest)
+        assertEquals(3740L, f.posNewest)
+        assertEquals(3600, f.posHeld)
+    }
+
+    @Test
+    fun `backlog states what is owed, and names a gap instead of hiding it`() {
+        val f = Control.decode(
+            """{"type":"backlog","from":151,"to":250,"count":100,"lost":130,
+               "reason":"130 positions aged out of the node before you asked — the track has a gap",
+               "oldest":151,"newest":250,"held":100}"""
+        ) as NodeFrame.Backlog
+        assertEquals(151L, f.from)
+        assertEquals(100, f.count)
+        assertEquals(130, f.lost)
+        assertTrue(f.reason!!.contains("gap"))
+    }
+
+    @Test
+    fun `a caught-up client is owed nothing and told so without a gap`() {
+        val f = Control.decode(
+            """{"type":"backlog","from":251,"to":250,"count":0,"lost":0,"reason":null,
+               "oldest":151,"newest":250,"held":100}"""
+        ) as NodeFrame.Backlog
+        assertEquals(0, f.count)
+        assertNull(f.reason)
+    }
+
+    @Test
+    fun `backlog progress and completion carry the authoritative cursor`() {
+        val chunk = Control.decode("""{"type":"backlogChunk","cursor":210,"remaining":40}""")
+        assertEquals(210L, (chunk as NodeFrame.BacklogChunk).cursor)
+        assertEquals(40, chunk.remaining)
+
+        val done = Control.decode("""{"type":"backlogDone","cursor":250,"live":true}""")
+        assertEquals(250L, (done as NodeFrame.BacklogDone).cursor)
+        assertTrue(done.live)
+    }
+
+    @Test
+    fun `one cursor frame resumes both streams, since they advance independently`() {
+        assertEquals(
+            """{"type":"cursor","seq":12,"posSeq":3740}""",
+            ClientFrame.Cursor(12, 3740).toJson(),
+        )
+    }
+
+    @Test
     fun `cursor and reset are the smallest frames on the wire`() {
-        assertEquals("""{"type":"cursor","seq":12}""", ClientFrame.Cursor(12).toJson())
+        // posSeq defaults to 0 — "I have no positions", which is what a fresh
+        // install honestly means, rather than an omitted field the node must guess at.
+        assertEquals("""{"type":"cursor","seq":12,"posSeq":0}""", ClientFrame.Cursor(12).toJson())
         assertEquals("""{"type":"reset"}""", ClientFrame.Reset.toJson())
     }
 }

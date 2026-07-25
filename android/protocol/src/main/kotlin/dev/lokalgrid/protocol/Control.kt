@@ -36,7 +36,34 @@ sealed interface NodeFrame {
         val youName: String,
         val cap: Int,
         val duty: Double,
+        // What the node's position log holds right now, so a returning client can
+        // tell whether its saved cursor still exists there before asking.
+        val posOldest: Long,
+        val posNewest: Long,
+        val posHeld: Int,
     ) : NodeFrame
+
+    /**
+     * The node's answer to a position cursor: what it is about to send, stated
+     * before it sends it. `lost` records aged out of the log before this client
+     * came back — a gap the UI must show rather than draw straight through.
+     */
+    data class Backlog(
+        val from: Long,
+        val to: Long,
+        val count: Int,
+        val lost: Int,
+        val reason: String?,
+        val oldest: Long,
+        val newest: Long,
+        val held: Int,
+    ) : NodeFrame
+
+    /** Progress while catching up: bounded chunks, interleaved with live traffic. */
+    data class BacklogChunk(val cursor: Long, val remaining: Int) : NodeFrame
+
+    /** You are current. The cursor here is authoritative — adopt it, don't count. */
+    data class BacklogDone(val cursor: Long, val live: Boolean) : NodeFrame
 
     /** Everyone attached to the node right now. Drives Clients, and the names in queue reasons. */
     data class Roster(val clients: List<RosterEntry>, val cap: Int) : NodeFrame
@@ -106,6 +133,11 @@ sealed interface NodeFrame {
         val dutyActualPct: Double,
         val dutyUsedPct: Double,
         val clients: List<ClientStat>,
+        // The position log restated, so a long-lived client never renders a
+        // connect-time snapshot beside a cursor that has since moved on.
+        val posOldest: Long,
+        val posNewest: Long,
+        val posHeld: Int,
     ) : NodeFrame
 
     /** Admission control said no, with something worth showing. Never silent (§3). */
@@ -165,9 +197,13 @@ sealed interface ClientFrame {
         }
     }
 
-    /** "I have everything up to seq" — ask for the delta, never let the node infer it. */
-    data class Cursor(val seq: Long) : ClientFrame {
-        override fun toJson() = """{"type":"cursor","seq":$seq}"""
+    /**
+     * "I have chat up to `seq` and positions up to `posSeq`" — ask for the delta,
+     * never let the node infer it (§3). The two streams advance independently, so
+     * they carry separate cursors in one frame.
+     */
+    data class Cursor(val seq: Long, val posSeq: Long = 0) : ClientFrame {
+        override fun toJson() = """{"type":"cursor","seq":$seq,"posSeq":$posSeq}"""
     }
 
     data object Reset : ClientFrame {
@@ -206,8 +242,32 @@ object Control {
                 youName = you?.str("name") ?: "you",
                 cap = o.int("cap") ?: 9,
                 duty = o.dbl("duty") ?: 0.01,
+                posOldest = o.lng("posOldest") ?: 0,
+                posNewest = o.lng("posNewest") ?: 0,
+                posHeld = o.int("posHeld") ?: 0,
             )
         }
+
+        "backlog" -> NodeFrame.Backlog(
+            from = o.lng("from") ?: 0,
+            to = o.lng("to") ?: 0,
+            count = o.int("count") ?: 0,
+            lost = o.int("lost") ?: 0,
+            reason = o.str("reason"),
+            oldest = o.lng("oldest") ?: 0,
+            newest = o.lng("newest") ?: 0,
+            held = o.int("held") ?: 0,
+        )
+
+        "backlogChunk" -> NodeFrame.BacklogChunk(
+            cursor = o.lng("cursor") ?: 0,
+            remaining = o.int("remaining") ?: 0,
+        )
+
+        "backlogDone" -> NodeFrame.BacklogDone(
+            cursor = o.lng("cursor") ?: 0,
+            live = o["live"]?.jsonPrimitive?.contentOrNull() == "true",
+        )
         "roster" -> NodeFrame.Roster(
             clients = (o["clients"]?.jsonArray ?: emptyList()).map {
                 val c = it.jsonObject
@@ -299,6 +359,9 @@ object Control {
                     sharePct = c.int("sharePct") ?: 0,
                 )
             },
+            posOldest = o.lng("posOldest") ?: 0,
+            posNewest = o.lng("posNewest") ?: 0,
+            posHeld = o.int("posHeld") ?: 0,
         )
 
         "rejected" -> NodeFrame.Rejected(

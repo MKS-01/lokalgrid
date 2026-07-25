@@ -14,6 +14,9 @@
 //     peerSkip {reason, movedM}                         — your position was decimated
 //     config   {values, locked, editable}               — the config in force
 //     stats    {uptimeS, queueDepth, dutyUsedPct, clients:[…]} — airtime accounting
+//     backlog  {from, to, count, lost, reason, oldest, newest} — what you are owed
+//     backlogChunk {cursor, remaining}                  — progress while catching up
+//     backlogDone  {cursor, live}                       — you are current
 //     rejected {msgId, reason, scope}                   — admission control, never silent
 //   node → client, BINARY: exactly 32 bytes = one track record (§4)
 //   client → node, TEXT:
@@ -21,7 +24,7 @@
 //     name     {name}                 rename yourself in the roster
 //     pos      {latE7, lonE7, hd, epoch}  share where *you* are
 //     config   {patch:{…}}            staged edit, written explicitly (§6)
-//     cursor   {seq}                  "I have everything up to seq" → backfill delta
+//     cursor   {seq, posSeq}          "I have chat up to seq, positions to posSeq"
 //     reset    {}                     restart the synthetic track
 //
 // This is not the BLE path — BLE cannot be mocked (§6). It stands in for the
@@ -34,6 +37,7 @@ import { encodeRecord, RECORD_BYTES } from './record.js';
 import { ChatHub } from './chat.js';
 import { RelayQueue, LANE, airtimeMs } from './relay.js';
 import { NodeConfig, Stats, Peers } from './nodestate.js';
+import { PositionLog, Cursors } from './history.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HZ = Number(process.env.HZ ?? 1);
@@ -70,6 +74,13 @@ const relay = new RelayQueue({ duty: DUTY });
 const config = new NodeConfig({ dutyPct: DUTY * 100, maxClients: CAP });
 const stats = new Stats();
 const peers = new Peers();
+const history = new PositionLog({ capacity: Number(process.env.HISTORY ?? 3600) });
+const cursors = new Cursors();
+
+// Backlog is served in bounded chunks, interleaved with live traffic — never
+// drained in one blocking go (§3).
+const BACKLOG_CHUNK = Number(process.env.BACKLOG_CHUNK ?? 60);
+const BACKLOG_TICK_MS = 250;
 
 let gen = newGenerator();
 let replayPos = 0;
@@ -111,6 +122,12 @@ function broadcastStats() {
       queueDepth: relay.depth,
       dutyPct: config.values.dutyPct,
     }),
+    // Restate what the log holds. `hello` said it once at connect, and a client
+    // that stayed on for an hour would otherwise still be showing that snapshot
+    // next to a cursor that has moved — two numbers on screen contradicting.
+    posOldest: history.oldestSeq,
+    posNewest: history.newestSeq,
+    posHeld: history.count,
   });
 }
 
@@ -140,6 +157,9 @@ wss.on('connection', (ws, req) => {
   sockets.set(ws, client);
   console.log(`[+] ${client.name} (id ${client.id}) from ${who} — ${sockets.size} connected`);
   relay.addClient(client.id);
+  // A fresh client starts with an empty cursor: it has received nothing, and it
+  // says so itself on resume rather than the node assuming a starting point.
+  cursors.add(client.id, 0);
 
   send(ws, {
     type: 'hello',
@@ -151,6 +171,11 @@ wss.on('connection', (ws, req) => {
     you: { id: client.id, name: client.name },
     cap: CAP,
     duty: DUTY,
+    // What the position log currently holds, so a returning client can tell
+    // *before* asking whether its cursor still exists here.
+    posOldest: history.oldestSeq,
+    posNewest: history.newestSeq,
+    posHeld: history.count,
   });
   // Backfill the shared channel from what the node still holds, then the state
   // the other tabs render: config in force, everyone's last known position.
@@ -176,12 +201,45 @@ wss.on('connection', (ws, req) => {
     sockets.delete(ws);
     hub.leave(client.id);
     relay.dropClient(client.id);
+    cursors.drop(client.id);
+    peers.drop(client.id);
     console.log(`[-] ${client.name} left — ${sockets.size} connected`);
     broadcastRoster();
   };
   ws.on('close', gone);
   ws.on('error', gone);
 });
+
+/**
+ * Answer a client's position cursor. The node states what it is about to send
+ * *before* sending it — count, range, and any gap where records aged out — so a
+ * missing stretch of track is a stated fact rather than a silent discontinuity
+ * the client would draw as a straight line.
+ */
+function resumePositions(ws, client, cursor) {
+  const plan = history.plan(cursor);
+  cursors.add(client.id, Math.max(cursor, plan.from - 1));
+  send(ws, {
+    type: 'backlog',
+    from: plan.from,
+    to: plan.to,
+    count: plan.count,
+    lost: plan.lost,
+    reason: plan.reason,
+    oldest: history.oldestSeq,
+    newest: history.newestSeq,
+    held: history.count,
+  });
+  if (plan.count > 0) {
+    cursors.startBacklog(client.id, plan.from - 1, plan.to);
+    console.log(
+      `[<] ${client.name} resumes at ${cursor} — ${plan.count} behind` +
+        (plan.lost ? `, ${plan.lost} aged out` : '')
+    );
+  } else {
+    send(ws, { type: 'backlogDone', cursor: history.newestSeq, live: true });
+  }
+}
 
 function handle(ws, client, msg) {
   switch (msg.type) {
@@ -263,8 +321,10 @@ function handle(ws, client, msg) {
     }
     case 'cursor': {
       // The client is authoritative about what it has received (§3) — it asks,
-      // the node never infers.
+      // the node never infers. One frame resumes both streams: chat by seq, and
+      // positions by their own cursor, since they advance independently.
       for (const m of hub.since(Number(msg.seq) || 0)) send(ws, { type: 'chat', ...m });
+      if (msg.posSeq !== undefined) resumePositions(ws, client, Number(msg.posSeq) || 0);
       return;
     }
     case 'reset': {
@@ -281,12 +341,42 @@ function handle(ws, client, msg) {
 
 // Drive the world clock regardless of who's listening, so all clients stay in
 // lockstep on the same track — closer to "one node, everyone sees the same".
+// Every record is logged first and *then* broadcast: the log is what exists, so
+// a client that misses a live frame can always come back for it by seq.
 setInterval(() => {
   const frame = nextFrame();
-  for (const ws of sockets.keys()) {
-    if (ws.readyState === ws.OPEN) ws.send(frame, { binary: true });
+  const seq = history.append(frame);
+  for (const [ws, client] of sockets) {
+    if (ws.readyState !== ws.OPEN) continue;
+    // A client mid-backlog is behind by definition; its live records arrive with
+    // the catch-up stream in order, rather than jumping the queue out of sequence.
+    if (cursors.catchingUp(client.id)) continue;
+    ws.send(frame, { binary: true });
+    cursors.set(client.id, seq, history.newestSeq);
   }
 }, 1000 / HZ);
+
+// Backlog pump. Bounded chunks, one per tick, so a client returning after an
+// hour catches up *beside* the live ones instead of blocking them (§3).
+setInterval(() => {
+  for (const [ws, client] of sockets) {
+    const state = cursors.catchingUp(client.id);
+    if (!state || ws.readyState !== ws.OPEN) continue;
+
+    const { records, cursor, remaining } = history.chunk(state.cursor, BACKLOG_CHUNK);
+    for (const buf of records) ws.send(buf, { binary: true });
+    state.cursor = cursor;
+    cursors.set(client.id, cursor, history.newestSeq);
+
+    if (!records.length || remaining === 0) {
+      cursors.finishBacklog(client.id);
+      send(ws, { type: 'backlogDone', cursor, live: true });
+      console.log(`[<] ${client.name} caught up at seq ${cursor}`);
+    } else {
+      send(ws, { type: 'backlogChunk', cursor, remaining });
+    }
+  }
+}, BACKLOG_TICK_MS);
 
 // Airtime tick: release whatever the duty cycle now allows, then re-quote every
 // message still waiting so the queue reasons on screen stay live and honest.

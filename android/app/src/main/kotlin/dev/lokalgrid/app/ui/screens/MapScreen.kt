@@ -29,7 +29,7 @@ import dev.lokalgrid.app.ui.theme.Lg
 fun MapScreen(state: LiveState, onSharePosition: () -> Unit = {}) {
     val peers = peersOf(state)
     Column(Modifier.fillMaxSize().background(Lg.Paper)) {
-        MapLibreView(state.latest, peers, Modifier.fillMaxWidth().weight(1f))
+        MapLibreView(state.latest, peers, state.track, Modifier.fillMaxWidth().weight(1f))
         // The map takes the free space; this panel keeps its own bottom gap so the
         // last row never sits flush on the tab bar.
         Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 14.dp)) {
