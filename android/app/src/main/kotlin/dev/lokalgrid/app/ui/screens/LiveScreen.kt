@@ -26,6 +26,7 @@ import dev.lokalgrid.app.ui.LgButton
 import dev.lokalgrid.app.ui.LgTextField
 import dev.lokalgrid.app.ui.Pill
 import dev.lokalgrid.app.ui.PillKind
+import dev.lokalgrid.app.ui.ScrollGap
 import dev.lokalgrid.app.ui.SectionLabel
 import dev.lokalgrid.app.ui.accuracyMeters
 import dev.lokalgrid.app.ui.peersOf
@@ -54,7 +55,7 @@ fun LiveScreen(
             .fillMaxSize()
             .background(Lg.Paper)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp)
+            .padding(start = 14.dp, end = 14.dp, bottom = ScrollGap)
     ) {
         if (r == null) {
             SectionLabel("fix")

@@ -38,6 +38,14 @@ import dev.lokalgrid.app.ui.theme.Lg
 
 private val Mono = FontFamily.Monospace
 
+/**
+ * Trailing space inside every scrolling tab. Without it the last row ends flush
+ * against the tab bar, which reads as content cut off rather than content ended
+ * — and on a screen whose whole job is showing you the *last* thing, that is the
+ * row you most need to see.
+ */
+val ScrollGap = 28.dp
+
 enum class PillKind(val fg: Color, val bg: Color) {
     OK(Lg.Lock, Lg.LockBg),
     NEUTRAL(Lg.Sig, Lg.SigBg),

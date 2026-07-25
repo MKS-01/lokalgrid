@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import dev.lokalgrid.app.ui.LgCard
 import dev.lokalgrid.app.ui.LgTextField
 import dev.lokalgrid.app.ui.Pill
 import dev.lokalgrid.app.ui.PillKind
+import dev.lokalgrid.app.ui.ScrollGap
 import dev.lokalgrid.app.ui.SectionLabel
 import dev.lokalgrid.app.ui.theme.Lg
 import dev.lokalgrid.protocol.Lane
@@ -85,6 +87,7 @@ fun ChatScreen(state: LiveState, onSend: (String, Boolean) -> Unit) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    contentPadding = PaddingValues(bottom = ScrollGap),
                 ) {
                     item { SectionLabel("one shared channel · ${state.messages.size} messages") }
                     items(state.messages, key = { it.key }) { MessageCard(it) }

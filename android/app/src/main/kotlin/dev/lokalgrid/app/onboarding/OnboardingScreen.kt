@@ -44,6 +44,7 @@ import dev.lokalgrid.app.ui.LgButton
 import dev.lokalgrid.app.ui.LgTextField
 import dev.lokalgrid.app.ui.Pill
 import dev.lokalgrid.app.ui.PillKind
+import dev.lokalgrid.app.ui.ScrollGap
 import dev.lokalgrid.app.ui.SectionLabel
 import dev.lokalgrid.app.ui.theme.Lg
 
@@ -109,7 +110,7 @@ fun OnboardingScreen(prefs: Prefs, onDone: (String) -> Unit) {
 
 @Composable
 private fun StepIntro() {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = ScrollGap)) {
         Spacer(Modifier.height(12.dp))
         Text("lokalgrid", color = Lg.Ink, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
         Text(
@@ -147,7 +148,7 @@ private fun StepPermissions(context: Context) {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { refresh() }
 
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = ScrollGap)) {
         Spacer(Modifier.height(12.dp))
         Text("Permissions", color = Lg.Ink, fontFamily = Mono, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Body(
@@ -187,7 +188,7 @@ private fun StepBattery(context: Context) {
     var exempt by remember { mutableStateOf(Setup.batteryExempt(context)) }
     OnResume { exempt = Setup.batteryExempt(context) }
 
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = ScrollGap)) {
         Spacer(Modifier.height(12.dp))
         Text("Battery", color = Lg.Ink, fontFamily = Mono, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Body(
@@ -223,7 +224,7 @@ private fun StepBattery(context: Context) {
 
 @Composable
 private fun StepNode(url: String, onUrl: (String) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = ScrollGap)) {
         Spacer(Modifier.height(12.dp))
         Text("The node", color = Lg.Ink, fontFamily = Mono, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Body(

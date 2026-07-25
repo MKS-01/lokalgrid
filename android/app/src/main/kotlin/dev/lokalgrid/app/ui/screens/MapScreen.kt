@@ -30,7 +30,9 @@ fun MapScreen(state: LiveState, onSharePosition: () -> Unit = {}) {
     val peers = peersOf(state)
     Column(Modifier.fillMaxSize().background(Lg.Paper)) {
         MapLibreView(state.latest, peers, Modifier.fillMaxWidth().weight(1f))
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
+        // The map takes the free space; this panel keeps its own bottom gap so the
+        // last row never sits flush on the tab bar.
+        Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 14.dp)) {
             SectionLabel("people · ${peers.size + 1} on this node")
             InfoRow("you (${state.selfName})") {
                 Pill(if (state.positionsShared > 0) "shared ×${state.positionsShared}" else "here", PillKind.OK)

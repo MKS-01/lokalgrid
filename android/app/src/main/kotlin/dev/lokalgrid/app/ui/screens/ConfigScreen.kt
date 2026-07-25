@@ -26,6 +26,7 @@ import dev.lokalgrid.app.ui.LgButton
 import dev.lokalgrid.app.ui.LgTextField
 import dev.lokalgrid.app.ui.Pill
 import dev.lokalgrid.app.ui.PillKind
+import dev.lokalgrid.app.ui.ScrollGap
 import dev.lokalgrid.app.ui.SectionLabel
 import dev.lokalgrid.app.ui.theme.Lg
 
@@ -54,7 +55,8 @@ fun ConfigScreen(
 
     Column(
         Modifier.fillMaxSize().background(Lg.Paper)
-            .verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(start = 14.dp, end = 14.dp, bottom = ScrollGap)
     ) {
         // This phone's own setup, above the node's config — the two are different
         // machines and the UI should never blur which one a setting lives on.
