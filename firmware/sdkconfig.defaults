@@ -19,16 +19,27 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_PM_ENABLE=y
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
 
-# BLE — NimBLE, multi-connection is the whole point
+# BLE — NimBLE, multi-connection is the whole point. 9 is NimBLE's hard
+# ceiling and therefore the effective client cap (§3, raised from 3 on
+# 2026-07-23); these two lines were still carrying the old figure.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9
 
-# WiFi SoftAP — 3 clients + rejoin headroom
-CONFIG_ESP_WIFI_SOFTAP_MAX_STA=4
+# WiFi SoftAP — the station limit is *not* a Kconfig symbol in v5.3; it is
+# `wifi_config_t.ap.max_connection` at runtime (wifi_ap.c, capped at 10 by the
+# API). PROJECT.md section 5 listed CONFIG_ESP_WIFI_SOFTAP_MAX_STA, which does
+# not exist and was silently ignored — the build warned, which is how it was
+# caught. What does need raising is the DHCP server's lease table, or the 10th
+# phone associates and then gets no address.
+CONFIG_LWIP_DHCPS_MAX_STATION_NUM=10
 
 # HTTP server with WebSocket
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# Watchdog
+# Watchdog — names the offending task rather than just rebooting (§5)
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+
+# The scheduler and codec get their own log level later; keep the default at
+# info so the first boots are readable.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

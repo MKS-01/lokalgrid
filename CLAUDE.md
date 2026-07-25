@@ -22,7 +22,9 @@ The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is 
 
 The app is **not gated behind a live connection** — the Link screen (tap the status bar) shows permissions · wifi · ble · session as a flow, but every tab stays readable offline and reconnecting resumes from the cursor. Do not add a connect gate; it would hide exactly the data the resume design exists to preserve.
 
-**BLE is still Phase 03.** Permissions and onboarding exist; nothing opens a GATT connection. Do not add UI that implies a live BLE link before the board is in hand — the app says `ble link · phase 03 · needs the board` on purpose. No hardware until **Phase 03**, where the toolchain, USB-JTAG breakpoint, SoftAP + BLE advertising, and the un-mockable BLE GATT path all land. The firmware skeleton under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`) is parked until then; ESP-IDF not yet installed on this machine. Repo: github.com/MKS-01/lokalgrid.
+**Phase 03 started 2026-07-26** — the board is in hand (868/915 SX1262 variant) and ESP-IDF v5.3.1 is installed under `Desktop/C0D3/` (toolchain too, via `IDF_TOOLS_PATH`; set it *before* `export.sh`). `firmware/` builds green: I²C inventory, SoftAP with a firmware-enforced idle timeout, NimBLE advertising. **Nothing has been flashed yet** — the board has not been connected, so every claim about hardware behaviour is still unverified. Next: flash, USB-JTAG breakpoint, then `esp_http_server` + GNSS so the existing app lights up on real hardware.
+
+**BLE GATT is still not written**, on purpose: it is the one path the mock cannot stand in for, so it gets built against the board with the protocol in front of it. The app says `ble link · phase 03 · needs the board`; do not add UI implying a live BLE link before that path exists. Repo: github.com/MKS-01/lokalgrid.
 
 ## Product framing — a modern walkie-talkie *(2026-07-25)*
 
@@ -72,4 +74,4 @@ Keep a dated entry in `BUILDLOG.md` per working session (`/build-log`) — lost 
 
 ## Open blocker
 
-LoRa band (433 vs 868) is unconfirmed — read the silkscreen before buying an antenna. Does not block Phases 01–03, which use no LoRa.
+**Resolved 2026-07-26: the band is 868, constrained to 865–867** (India's delicensed ISM allocation and the Meshtastic `IN` region — never the full EU 868 range). The owner confirmed the India-compatible variant. Buy an 865–868 MHz whip; confirm `868M` on the silkscreen before the first transmission, since a mismatch reads exactly like a firmware bug and degrades the PA. TinyGS is out (satellites are on 433). Nothing before Phase 06 transmits.

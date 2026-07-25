@@ -27,7 +27,7 @@ The silkscreen reads **T-Beam S3-Core v3.0** — this is expected. The Supreme *
 | Subsystem | Part | Bus |
 |---|---|---|
 | MCU | ESP32-S3FN8, dual core, 8 MB flash, 8 MB octal PSRAM | — |
-| LoRa | SX1262 | SPI2 (dedicated) |
+| LoRa | SX1262, **868/915 MHz** variant | SPI2 (dedicated) |
 | GNSS | L76K (some units ship u-blox MAX-M10S) | UART1 |
 | PMU | AXP2101, with coulomb counter | I²C0 |
 | IMU | QMI8658 | I²C0 |
@@ -38,19 +38,18 @@ The silkscreen reads **T-Beam S3-Core v3.0** — this is expected. The Supreme *
 | Storage | microSD | SPI3 (dedicated) |
 | Power | 18650 holder on baseboard | — |
 
-### Open question — RESOLVE BEFORE BUYING AN ANTENNA
+### LoRa band — RESOLVED *(2026-07-26)*
 
-**LoRa band is unconfirmed.** The robu.in listing title says 433 MHz. The user believes the module is 868/915. These cannot both be right.
+**868 MHz, constrained to 865–867.** The board is the **868/915 MHz SX1262** variant — the India-compatible one, confirmed by the owner (the unit is the SoftRF edition of the T-Beam Supreme). This closes the question that stood from the first session; the 433 MHz figure in the robu.in listing title was wrong for this unit. 915 is the same module's other setting and is **not** usable here — it belongs to the US/AU allocations.
 
-To resolve:
-- Read the silkscreen beside the SMA connector — LilyGO marks it `433M`, `868M`, or `915M`
-- Or compare the supplied whip length: an 868/915 antenna is roughly half the length of a 433 one
+What follows from it, and is now binding:
 
-Why it matters:
-- **433 MHz** — delicensed in India (433.05–434.79). Outside the Meshtastic `IN` region, but *ideal* for TinyGS satellite reception, since most LoRa satellites are on 433.
-- **868 MHz** — must stay within 865–867, which is India's delicensed ISM allocation and the Meshtastic `IN` region. Do not use the full EU 868 range.
+- **Centre the beacon inside 865–867 MHz** — India's delicensed ISM allocation and the Meshtastic `IN` region. **Do not use the full EU 868 range**; part of it is licensed here.
+- Buy an **865–868 MHz** SMA whip. An 868 antenna is roughly half the length of a 433 one, which is the quick sanity check on what arrives.
+- TinyGS satellite reception is **out** — most LoRa satellites are on 433. That was only ever an aside, and this settles it.
+- The **1% hourly duty cycle** stands regardless, enforced as a hard limit in firmware rather than a config setting.
 
-Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in firmware, not as a config setting.
+Still worth thirty seconds with the board in hand before the first transmission: read the silkscreen beside the SMA connector (LilyGO marks it `433M`, `868M` or `915M`) and confirm it says `868M`. A band mismatch reads exactly like a firmware bug and degrades the PA over weeks — cheap to verify, expensive to assume. It does not block Phases 01–03, which transmit nothing.
 
 ### What each peripheral is actually for *(2026-07-25)*
 
@@ -95,7 +94,7 @@ A second board is the cheapest way to double useful coverage, and it is what mak
 
 | Part | ~Cost | Note |
 |---|---|---|
-| Band-matched SMA whip | ₹200 | Must match silkscreen. Wrong band = bad SWR = slow PA damage. |
+| **865–868 MHz** SMA whip | ₹200 | Band confirmed 868 (section 1). Wrong band = bad SWR = slow PA damage. |
 | Active GNSS antenna, u.FL | ₹300 | Biggest single improvement to fix quality and TTFF. Do before any filtering work. |
 | Flat-top 18650, 3500 mAh | ₹600 | Holder is built to original 18650 spec — protected/button-top cells (~70 mm) will not fit. |
 
@@ -363,21 +362,33 @@ Written atomically: `manifest.tmp` then rename. Below ~15% free space, delete ol
 | SD | `esp_vfs_fat` over SDSPI | Mount lazily, unmount before sleep |
 | Tests | Unity on target + host build of pure logic | Scheduler and codec compile for host with stub HAL → CI without hardware |
 
-### Partition table, 8 MB
+### Partition table, 8 MB *(corrected 2026-07-26 — the first real build rejected the old one)*
 
 ```
-nvs      , data, nvs      , 0x9000 , 0x6000
-otadata  , data, ota      , 0xf000 , 0x2000
+nvs      , data, nvs      , 0x9000 , 0x4000
+otadata  , data, ota      , 0xd000 , 0x2000
 app0     , app , ota_0    , 0x10000, 0x280000
 app1     , app , ota_1    ,        , 0x280000
 storage  , data, littlefs ,        , 0x2C0000   # track logs + manifest
 ```
 
+The version carried here until now gave `nvs` 0x6000 and put `otadata` straight
+after it, which ends at 0x11000 and overlaps `app0` at 0x10000 — the app has to
+start there. `gen_esp32part` refused it the first time this was built for real
+(*"Partitions overlap"*). 16 KiB of NVS is ample: WiFi calibration plus this
+project's settings.
+
+**Open question, not yet decided:** `app1` costs 2.5 MB for OTA, which §2
+rejects outright ("nobody depends on this device — flash over USB"). Dropping it
+would nearly double the space for track logs and PMTiles. Left in place for now
+because rollback protection uses the same machinery; worth settling before the
+log or the basemap starts running out of room.
+
 ### sdkconfig — the lines that matter
 
 ```
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      # default is 1; 9 is NimBLE's hard ceiling — the multi-client switch
-CONFIG_ESP_WIFI_SOFTAP_MAX_STA=10       # ESP-IDF max; 9 clients + rejoin headroom
+CONFIG_LWIP_DHCPS_MAX_STATION_NUM=10    # DHCP leases; the AP station cap itself is runtime, see below
 CONFIG_SPIRAM_MODE_OCT=y                # S3 module is octal PSRAM
 CONFIG_PM_ENABLE=y                      # dynamic frequency scaling
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     # biggest idle-power win
@@ -385,6 +396,14 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 CONFIG_HTTPD_WS_SUPPORT=y
 ```
+
+**`CONFIG_ESP_WIFI_SOFTAP_MAX_STA` does not exist** in ESP-IDF v5.3 — it was
+listed here and was silently ignored (the build warns about unknown symbols,
+which is how it surfaced). The SoftAP station limit is a *runtime* field,
+`wifi_config_t.ap.max_connection`, capped at 10 by the API and set in
+`wifi_ap.c`. The Kconfig line that does matter is the DHCP server's lease table
+above: without it the tenth phone associates and then never gets an address,
+which looks like a broken node rather than a full one.
 
 ### Debugging — set this up in Phase 01
 
@@ -592,19 +611,21 @@ node bench --duration 60s
 
 ## 9. Resume here
 
-**Immediate blocker:** confirm the LoRa band from the silkscreen (section 1). Does not block Phases 00–03, which use no LoRa at all.
+**No blockers.** The LoRa band question is closed — 868, constrained to 865–867 (section 1, 2026-07-26). **Phase 03 has started:** the board is in hand and ESP-IDF v5.3.1 is being installed under `Desktop/C0D3/esp-idf` (the toolchain too, via `IDF_TOOLS_PATH`, so nothing lands in the home directory).
 
 **Next action:** finish Phase 02 against the mock. Phase 00 is done (mock node, `proto 2`, golden vectors); Phase 01's app decodes the live stream; the **forward flow** landed 2026-07-25 on all five tabs and was driven on an emulator — chat (send + emergency lane 0), position sharing with distance decimation, roster rename, staged-then-explicit config writes, node-computed airtime stats. The **first-run flow** landed the same day: launch theme + boot screen, then four setup steps (intro · BLE permissions with an explicit "location: later, at the tap" row · One UI battery exemption · node URL, persisted and editable), re-enterable from Config. BLE permissions are declared per §5; no GATT connection is opened anywhere — that stays Phase 03. **Per-client position cursors and backlog resume** landed the same day: every position is logged with a monotonic seq before broadcast, the client states its own cursor on connect, and the node replies with what it owes plus how many records aged out first — a gap is named, never drawn through. Catch-up is chunked and interleaved with live traffic (§3). A **Link screen** (tap the status bar, not a sixth tab) shows permissions · wifi · ble · session as an ordered flow without gating the app. **The phone's own GPS landed 2026-07-26:** `LocationManager` (not the fused provider — it would smooth the uncertainty §6 says must be rendered), permission asked for *at the tap on share*, your own dot drawn from your own fix with a solid ring while peers keep dashed ones, distances measured from you rather than from the node, and the node's fix kept as a fallback that says it is the node's. What is left in Phase 02: Room for the track itself, then two clients side by side with one deliberately flooding. The T-Beam stays in its box until Phase 03.
 
 **Naming rule (2026-07-25):** clients are **callsigns** (`alpha`, `bravo`, `charlie`, … — NATO alphabet), never personal names, anywhere in code, tests, docs or wireframes.
 
-The firmware skeleton already exists under `firmware/` (CMake shell, partitions.csv, sdkconfig.defaults, LittleFS mount in `app_main`) and is parked until Phase 03. When hardware time comes, that phase's steps are:
+**Phase 03 is under way** *(2026-07-26)*. `firmware/` is no longer a skeleton: ESP-IDF v5.3.1 is installed (under `Desktop/C0D3/`, toolchain included — `firmware/README.md` has the order, and `IDF_TOOLS_PATH` has to be set before `export.sh`), and `idf.py build` is green at 1.0 MB with 62% of the app partition free. In the image now: the I²C inventory (`board.c`, which names every address that answered and says what a missing chip costs), the SoftAP with its idle timeout compiled in (`wifi_ap.c`), and NimBLE advertising with no GATT service yet on purpose (`ble_adv.c`).
 
-1. Install ESP-IDF v5.x (`firmware/README.md` has the exact commands), `idf.py set-target esp32s3`
-2. First `idf.py build flash monitor` — expect "littlefs mounted" and the heartbeat log
-3. Get OpenOCD + GDB attached over built-in USB-JTAG, set a breakpoint in `app_main`, confirm it hits
-4. SoftAP up with a fixed SSID + NimBLE advertising; phone sees `lokalgrid` in its WiFi list and in nRF Connect
-5. Point the app's WebSocket at the real SoftAP; build the BLE GATT path against the real board (the one thing the mock couldn't give you)
+**Nothing has been flashed** — the board has not been plugged in. The remaining steps of the phase:
+
+1. ~~Install ESP-IDF, `idf.py set-target esp32s3`~~ — done
+2. `idf.py flash monitor` with the board attached — expect the I²C inventory, "littlefs mounted", `advertising as "lokalgrid"`, `AP up`, then the heartbeat. **If the I²C scan is empty, suspect `board_pins.h` before the chips**: those pins come from LilyGO's `utilities.h` and are unverified against this unit, which is exactly what the scan exists to settle.
+3. OpenOCD + GDB over the built-in USB-JTAG, breakpoint in `app_main`, confirm it hits
+4. Phone sees `lokalgrid` in its WiFi list and in nRF Connect
+5. `esp_http_server` serving `proto 2` over WebSocket + GNSS on UART1 → real 32-byte records, so the app already on the phone lights up on real hardware; then the BLE GATT path, which is the one thing the mock could never give you
 
 **Then:** Phases 04+ on real hardware, and keep the build log going throughout.
 

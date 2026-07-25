@@ -1,5 +1,30 @@
 # Build log
 
+## 2026-07-26 (later) — Phase 03 opens: band settled, toolchain up, first build green
+
+**The band question is closed.** The board is the **868/915 MHz SX1262** variant — the India-compatible one. So: keep the radio inside **865–867 MHz** (never the full EU 868 range, part of which is licensed here), buy an 865–868 whip, and drop the TinyGS aside for good, since the satellites are on 433. The 433 figure in the robu.in listing title was simply wrong for this unit. Still worth thirty seconds confirming `868M` on the silkscreen before the first transmission — a mismatch reads exactly like a firmware bug and degrades the PA over weeks. Nothing before Phase 06 transmits, so it gates only the radio work.
+
+**Toolchain.** ESP-IDF v5.3.1 cloned to `Desktop/C0D3/esp-idf`, and the ~2 GB of compilers to `Desktop/C0D3/esp-tools` via `IDF_TOOLS_PATH` — nothing in the home directory, which is a real choice rather than tidiness: `export.sh` looks in `~/.espressif` unless that variable is set *first*, and the failure mode is "toolchain missing" on a machine where it is plainly installed. Written down in `firmware/README.md` in the order it has to happen.
+
+**Firmware, first real code since the skeleton.** `idf.py build` is green: `node.bin` is 1.0 MB, 62 % of the app partition free.
+
+- `board.c` — scans I²C0 and **names every address that answered**, then says what is missing *and what that costs*: no AXP2101 means no power ladder and no GNSS/LoRa rails; no BME280 (expected on some variants) means baro and temp log as sentinels and the record stays 32 bytes. This is §8's "probe with timeout, log what answered, branch" made literal, and it doubles as verification of the pin map, which is the honest state of `board_pins.h`: those numbers come from LilyGO's `utilities.h` and are unverified against this unit. If the scan is empty, suspect the pins before the chips — the README says so.
+- `wifi_ap.c` — SoftAP `lokalgrid`, WPA2, up to 10 stations, **with the idle timeout compiled in**: 10 minutes if nobody ever connects, 5 minutes after the last phone leaves. Not a setting, per §2 — a toggle eventually gets left wrong and the failure is silent, a flat battery three days early with nothing in the log. It logs *why* it came up and warns before it goes down.
+- `ble_adv.c` — NimBLE advertising as `lokalgrid`, no bonding (a stale bond produces failures that look exactly like firmware bugs, §8). **Deliberately no GATT service:** the sync path is the one thing the mock could never stand in for (§6), so it gets built against the board with the protocol in front of it rather than guessed at now. What this buys today is the honest half — the phone can see the node exists over BLE. A connection logs that there is nothing to read yet.
+
+**Three stale things the build found, which is the argument for building early:**
+
+1. **The partition table in PROJECT.md §5 was invalid.** `nvs` 0x6000 at 0x9000 ends at 0xf000, `otadata` 0x2000 after it ends at 0x11000, and the app must start at 0x10000. `gen_esp32part` refused it outright. `nvs` is now 0x4000 so `otadata` lands exactly on 0x10000. It had sat there unbuilt since the first session.
+2. **`CONFIG_ESP_WIFI_SOFTAP_MAX_STA` does not exist** in v5.3 — listed in §5 and silently ignored. The station cap is runtime (`wifi_config_t.ap.max_connection`). What actually needed setting is `CONFIG_LWIP_DHCPS_MAX_STATION_NUM=10`, or the tenth phone associates and never gets an address, which looks like a broken node rather than a full one.
+3. **`sdkconfig.defaults` still carried the old client cap** — NimBLE 3 and SoftAP 4, from before the cap was raised to 9 on 2026-07-23. The docs had moved and the config had not.
+4. **Three `.gitignore` rules matched nothing.** `.gitignore` has no trailing comments, so `sdkconfig            # generated from...` was a literal pattern including the comment — and `firmware/**/*.bin` and `local.properties` had the same problem. The generated `sdkconfig` turning up as untracked is what gave it away. Comments moved to their own lines.
+
+Also noted in §5 rather than quietly changed: `app1` spends 2.5 MB on OTA, which §2 rejects outright. Dropping it would nearly double the room for track logs and PMTiles. Left alone until the log or the basemap actually needs the space.
+
+**Nothing has been flashed** — the board is not plugged in, and everything above is a host build. `idf.py flash monitor` is the whole of the next step, with the expected first-boot log written out in the README so a blank screen is diagnosable rather than mysterious.
+
+**Next:** flash it, hit a breakpoint in `app_main` over USB-JTAG, confirm the I²C inventory against this unit, then the two pieces that make the existing app light up on real hardware — `esp_http_server` serving `proto 2` over WebSocket, and GNSS on UART1 producing real 32-byte records.
+
 ## 2026-07-26 — your own dot from your own GPS, plus the chat crash and 16 KB pages
 
 **Tried:** the next thing on the Phase 02 list — the phone's own GNSS behind *share my position*. Until now the app offered the **node's** fix as yours, which was honest for a phone sitting next to the node and exercised the whole forward path, but it is not the thing.

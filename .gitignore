@@ -11,17 +11,23 @@ out/
 *.log
 
 # --- Firmware: ESP-IDF ---------------------------------------------------
-sdkconfig            # generated from sdkconfig.defaults, which IS committed
+# NB: .gitignore has no trailing comments — a comment on the same line as a
+# pattern becomes part of the pattern, so these three matched nothing until
+# 2026-07-26 (firmware/sdkconfig showed up untracked, which is how it surfaced).
+# generated from sdkconfig.defaults, which IS committed
+sdkconfig
 sdkconfig.old
 managed_components/
 dependencies.lock
-firmware/**/*.bin    # scoped: a .bin elsewhere may be a codec fixture worth keeping
+# scoped: a .bin elsewhere may be a codec fixture worth keeping
+firmware/**/*.bin
 firmware/**/*.elf
 firmware/**/*.map
 
 # --- Android -------------------------------------------------------------
 # (android/.gitignore holds the rest; these are the ones that must never leak)
-local.properties     # points at a machine-specific SDK path
+# points at a machine-specific SDK path
+local.properties
 *.apk
 *.aab
 *.keystore

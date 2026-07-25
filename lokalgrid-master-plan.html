@@ -210,7 +210,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <div class="rail"><span class="no">02</span>Hardware<p>The node. Everything is on the board already — the additions are two antennas and a cell.</p></div>
   <div class="body">
     <h2>The board</h2>
-    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. <b>Confirm the LoRa band from the silkscreen beside the SMA connector before buying an antenna:</b> 433, 868 and 915 MHz variants exist and are not interchangeable. In India, 865–867 MHz is the delicensed ISM allocation and the Meshtastic <code>IN</code> region — centre the beacon inside it rather than using the full EU 868 range.</div>
+    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. <b>Band: 868 MHz</b>, confirmed by the owner as the India-compatible variant (2026-07-26). 865–867 MHz is India’s delicensed ISM allocation and the Meshtastic <code>IN</code> region — centre the beacon inside it rather than using the full EU 868 range, and buy an 865–868 MHz whip. Worth confirming <code>868M</code> on the silkscreen beside the SMA connector before the first transmission.</div>
 
     <div class="tw"><table>
       <thead><tr><th>Subsystem</th><th>Part</th><th class="m">Bus</th></tr></thead>
@@ -631,7 +631,7 @@ crc16 CCITT over seq + len + payload</pre>
     <div class="note ok"><b>Phase 03 is a complete project.</b> Three phones on a shared map served by the real board is a finished thing. Everything after it is optional by design, and stopping there is a success rather than an abandonment.</div>
 
     <h2>Open</h2>
-    <div class="note bad"><b>The LoRa band is unconfirmed.</b> Read the silkscreen beside the SMA connector before buying an antenna — a mismatched whip gives poor range that reads exactly like a firmware bug, and degrades the PA over weeks. It blocks nothing before Phase 06, since nothing until then uses LoRa.</div>
+    <div class="note ok"><b>The LoRa band is settled: 868, kept inside 865–867.</b> Buy the whip to match; a mismatched one gives poor range that reads exactly like a firmware bug and degrades the PA over weeks. Nothing before Phase 06 transmits, so it gates only the radio work.</div>
 
     <h2>Where the rest lives</h2>
     <div class="tw"><table>
