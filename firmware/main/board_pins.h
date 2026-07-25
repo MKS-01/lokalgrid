@@ -15,11 +15,20 @@
  */
 #pragma once
 
-/* ── I²C0 — PMU, IMU, magnetometer, RTC, OLED, optional BME280 ───────────── */
+/* ── I²C0 — display bus. Verified 2026-07-26: OLED 0x3c, BME280 0x77,
+ *    QMC6310 0x1c all answered here. ─────────────────────────────────────── */
 #define LG_I2C_PORT       0
 #define LG_I2C_SDA        17
 #define LG_I2C_SCL        18
 #define LG_I2C_HZ         100000   /* 100 kHz for the scan; the OLED can go faster later */
+
+/* ── I²C1 — the PMU bus. The first scan of bus 0 found no AXP2101, no PCF8563
+ *    and no QMI8658, which cannot be true of a board that runs off a battery:
+ *    the Supreme puts them on a second bus. These pins are LilyGO's and are
+ *    what this second scan exists to confirm. ────────────────────────────── */
+#define LG_I2C1_PORT      1
+#define LG_I2C1_SDA       42
+#define LG_I2C1_SCL       41
 
 /* Known addresses on this bus, for naming what answers (§8: probe, log, branch). */
 #define LG_ADDR_AXP2101   0x34     /* PMU + coulomb counter */

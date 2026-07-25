@@ -1,5 +1,23 @@
 # Build log
 
+## 2026-07-26 (night) — it boots, and the screen says something
+
+**The board is running our firmware.** Flashed, booted, five chips inventoried, SoftAP up, BLE advertising, and the OLED showing real status. Phase 03's headline milestone in one sitting — with three assumptions demolished on the way, all of them by running rather than reading.
+
+**Getting in was the first surprise.** The factory SoftRF firmware owns the USB port, so esptool's automatic reset (`default_reset`, then `usb_reset`) never reaches the ROM: *"No serial data received"* while the device happily enumerates as `LilyGo TBeam_S3_Core`. The fix is the button dance — unplug, hold BOOT, plug in, release — after which it comes up as `USB JTAG_serial debug unit`. Worth writing down because it looks exactly like a dead board. Also: **the port renumbers** (`usbmodem101` in download mode, `usbmodem1101` after a reset), which failed one flash mid-session with the same misleading error. The README now says to let `idf.py` pick it, or `-p "$(ls -t /dev/cu.usbmodem* | head -1)"`.
+
+**Then a boot loop, and it was our own config.** `octal_psram: PSRAM ID read error: 0x00000000` → `abort()` → reboot, forever. PROJECT.md §1 has said "8 MB octal PSRAM" since the first session; **this module is quad**. Quad mode brings up all 8 MB (`Adding pool of 8192K`). `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` went in alongside, because a PSRAM that does not answer should cost the node its backlog buffers and say so, not take it down — the same "probe, log, branch" rule as the sensors, applied to the memory.
+
+**The I²C scan earned itself immediately.** Bus 0 (SDA 17, SCL 18) answered with the OLED at 0x3c, the BME280 at 0x77 — this unit *has* the barometer, so `baro`/`tmp` carry real values rather than sentinels — and the magnetometer at 0x1c. But **no PMU**, which cannot be true of a board that runs off a battery. So there is a second bus, and there is: `i2c1` on SDA 42 / SCL 41, carrying the **AXP2101** at 0x34 and the **PCF8563** at 0x51. The scan was written to name every address that answers precisely so a gap like that is a lead instead of a mystery. `board.c` now sweeps both and records which bus each chip lives on.
+
+**Still missing: the QMI8658.** It answered on neither bus. Either this variant omits it or it sits behind an AXP2101 rail that is still off — not concluded, and the motion gate falls back to GNSS speed until the PMU is driven and the scan repeats.
+
+**The OLED, because the display was the first thing the user asked about.** `oled.c` is a hand-written SH1106/SSD1306 driver: page addressing, a 5x7 font, six lines of 21 characters. No graphics library — this screen shows monospace text and nothing else, and the font plus twelve register writes is smaller than the dependency. Page addressing with a 2-column offset drives both controllers, so the driver does not need to know which panel is fitted (SH1106 shows columns 2..129; on an SSD1306 the same offset just shifts the image 2 px). It draws a splash before the network comes up so the screen is never blank while something is still happening, then the status page: ssid, phones connected, BLE state, uptime. **No battery line**, deliberately — the AXP2101 has not been read yet and a made-up percentage is worse than none.
+
+`littlefs` found the factory image where its partition is, said `Corrupted dir pair`, formatted itself and mounted 2816 KiB. Expected on first use, and the log says so rather than looking like damage.
+
+**Next:** drive the AXP2101 — battery percentage and the rails that GNSS and LoRa hang off (and re-scan for the IMU). Then the USB-JTAG breakpoint, then `esp_http_server` serving `proto 2` so the phone app already built lights up against the real node, then GNSS on UART1 for real 32-byte records.
+
 ## 2026-07-26 (later) — Phase 03 opens: band settled, toolchain up, first build green
 
 **The band question is closed.** The board is the **868/915 MHz SX1262** variant — the India-compatible one. So: keep the radio inside **865–867 MHz** (never the full EU 868 range, part of which is licensed here), buy an 865–868 whip, and drop the TinyGS aside for good, since the satellites are on 433. The 433 figure in the robu.in listing title was simply wrong for this unit. Still worth thirty seconds confirming `868M` on the silkscreen before the first transmission — a mismatch reads exactly like a firmware bug and degrades the PA over weeks. Nothing before Phase 06 transmits, so it gates only the radio work.

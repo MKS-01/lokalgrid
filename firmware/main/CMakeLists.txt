@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "board.c"
+        "oled.c"
         "wifi_ap.c"
         "ble_adv.c"
     INCLUDE_DIRS "."

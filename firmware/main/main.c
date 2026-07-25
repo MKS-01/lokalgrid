@@ -25,6 +25,7 @@
 
 #include "ble_adv.h"
 #include "board.h"
+#include "oled.h"
 #include "wifi_ap.h"
 
 static const char *TAG = "lokalgrid";
@@ -72,9 +73,15 @@ void app_main(void)
         board_report(&board);
     }
 
+    /* The screen comes up before the network so it is never blank while
+     * something is still happening — the same rule as the app's boot screen. */
+    oled_init(board.oled_bus);
+    oled_splash("mounting storage");
+
     init_nvs();
     mount_storage();
 
+    oled_splash("starting radios");
     if (!ble_adv_start()) {
         ESP_LOGE(TAG, "no BLE — the always-on layer is missing, WiFi still works");
     }
@@ -83,13 +90,41 @@ void app_main(void)
     /* Heartbeat. Says what is *true* rather than that it is alive: which
      * transports are up, how many phones are attached, and how much heap is
      * left, since the backlog buffers and tile serving live in that number. */
+    uint32_t up_s = 0;
     while (true) {
+        const uint8_t stations = wifi_ap_stations();
         ESP_LOGI(TAG, "ap %s · %u station%s · ble %s · heap %lu",
                  wifi_ap_is_up() ? "up" : "down",
-                 wifi_ap_stations(),
-                 wifi_ap_stations() == 1 ? "" : "s",
+                 stations,
+                 stations == 1 ? "" : "s",
                  ble_adv_is_advertising() ? "advertising" : "quiet",
                  (unsigned long)esp_get_free_heap_size());
-        vTaskDelay(pdMS_TO_TICKS(10000));
+
+        /* The same facts on the screen, for someone standing over the node with
+         * no phone attached. Named states, no spinner — the §6 rule applies to
+         * the device's own display too.
+         *
+         * Battery is deliberately absent: the AXP2101 has not been read yet, and
+         * a made-up percentage is worse than none. It appears when the PMU does. */
+        /* 22 = 21 characters on a line plus the terminator; the compiler checks
+         * these against the format strings, so the sizes are not decoration. */
+        char l_wifi[32], l_ssid[32], l_ble[32], l_up[32];
+        snprintf(l_ssid, sizeof(l_ssid), "ssid  %s", LG_AP_SSID);
+        if (wifi_ap_is_up()) {
+            snprintf(l_wifi, sizeof(l_wifi), "wifi  up, %u phone%s", stations,
+                     stations == 1 ? "" : "s");
+        } else {
+            snprintf(l_wifi, sizeof(l_wifi), "wifi  down, idle");
+        }
+        snprintf(l_ble, sizeof(l_ble), "ble   %s",
+                 ble_adv_is_advertising() ? "advertising" : "quiet");
+        snprintf(l_up, sizeof(l_up), "up    %lum  gnss --",
+                 (unsigned long)(up_s / 60));
+
+        const char *lines[] = { "lokalgrid", l_ssid, l_wifi, l_ble, l_up, "no phone needed" };
+        oled_lines(lines, 6);
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        up_s += 5;
     }
 }

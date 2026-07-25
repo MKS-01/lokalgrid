@@ -26,15 +26,15 @@ The silkscreen reads **T-Beam S3-Core v3.0** — this is expected. The Supreme *
 
 | Subsystem | Part | Bus |
 |---|---|---|
-| MCU | ESP32-S3FN8, dual core, 8 MB flash, 8 MB octal PSRAM | — |
+| MCU | ESP32-S3FN8, dual core, 8 MB flash, **8 MB quad PSRAM** *(not octal — verified 2026-07-26, see below)* | — |
 | LoRa | SX1262, **868/915 MHz** variant | SPI2 (dedicated) |
 | GNSS | L76K (some units ship u-blox MAX-M10S) | UART1 |
-| PMU | AXP2101, with coulomb counter | I²C0 |
-| IMU | QMI8658 | I²C0 |
-| Magnetometer | QMC6310 | I²C0 |
-| Baro/temp/humidity | BME280 (absent on some variants) | I²C0 |
-| RTC | PCF8563 | I²C0 |
-| Display | 1.3" OLED 128×64 | I²C0 |
+| PMU | AXP2101, with coulomb counter | **I²C1** (SDA 42, SCL 41) |
+| IMU | QMI8658 | *did not answer on either bus (2026-07-26)* |
+| Magnetometer | QMC6310 | I²C0 (SDA 17, SCL 18) |
+| Baro/temp/humidity | BME280 — **present on this unit** at 0x77 | I²C0 |
+| RTC | PCF8563 | **I²C1** |
+| Display | 1.3" OLED 128×64, SH1106 at 0x3c | I²C0 |
 | Storage | microSD | SPI3 (dedicated) |
 | Power | 18650 holder on baseboard | — |
 
@@ -50,6 +50,15 @@ What follows from it, and is now binding:
 - The **1% hourly duty cycle** stands regardless, enforced as a hard limit in firmware rather than a config setting.
 
 Still worth thirty seconds with the board in hand before the first transmission: read the silkscreen beside the SMA connector (LilyGO marks it `433M`, `868M` or `915M`) and confirm it says `868M`. A band mismatch reads exactly like a firmware bug and degrades the PA over weeks — cheap to verify, expensive to assume. It does not block Phases 01–03, which transmit nothing.
+
+### What the board actually answered *(2026-07-26, first boot)*
+
+Two claims in the table above were wrong, and both were found in the first five minutes of running real firmware rather than by reading:
+
+- **PSRAM is quad, not octal.** `CONFIG_SPIRAM_MODE_OCT=y` produced `octal_psram: PSRAM ID read error: 0x00000000` and then `abort()`, in a boot loop. Quad mode initialises all 8 MB (`Adding pool of 8192K of PSRAM memory to heap allocator`). `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` is now set as well: PSRAM that does not answer must degrade to internal RAM with a warning, never take the node down.
+- **There are two I²C buses**, and the split is not the one assumed. `i2c0` (SDA 17, SCL 18) carries the OLED, BME280 and magnetometer; `i2c1` (SDA 42, SCL 41) carries the **AXP2101** and the **PCF8563**. The first scan of bus 0 alone found no PMU on a board that runs off a battery, which is what pointed at a second bus — this is the I²C scan doing the job it exists for.
+- **The QMI8658 answered on neither bus.** Either this variant omits it or it sits behind a PMU rail that is still off. Not concluded; the motion gate falls back to GNSS speed until the AXP2101 is driven and the scan is repeated.
+- The BME280 **is** fitted on this unit, so `baro` and `tmp` carry real values rather than sentinels.
 
 ### What each peripheral is actually for *(2026-07-25)*
 

@@ -8,9 +8,15 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
-# PSRAM — S3 module is octal
+# PSRAM — **quad, not octal, on this unit** (2026-07-26). PROJECT.md section 1
+# said "8 MB octal PSRAM"; the first real boot said
+# "octal_psram: PSRAM ID read error: 0x00000000" and then abort() in a loop.
+# IGNORE_NOTFOUND is the important line: a PSRAM that does not answer must
+# degrade to internal RAM with a warning, never take the node down. The backlog
+# buffers and tile serving (section 1) are what shrink if it is really absent.
 CONFIG_SPIRAM=y
-CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
 
 # Console + logs over the built-in USB-JTAG (same cable as flashing)
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
