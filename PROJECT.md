@@ -90,7 +90,10 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | **ESP-IDF v5.x + CMake directly** | Not Arduino (hides sleep/NimBLE/power APIs). Not PlatformIO (IDF support lags on S3). |
 | **Hand-write the codec first, generate later** | Codegen is introduced in Phase 05, *after* drift has caused a real bug. Understanding beats compliance. |
 | **Uncertainty is rendered, always** | Error ellipses from HDOP, dashed interpolated segments, ages on stale positions. No consumer tracker does this; it is the product's honesty and its identity. |
-| **Chat = one shared channel, text only** *(2026-07-20)* | No DMs, no channels, no media at launch. One room mirrors the product (one node, one group in the field) and keeps Phase 03 small. Revisit only after Phase 03 is alive. |
+| **Chat = one shared channel, text only** *(2026-07-20, DM half superseded 2026-07-25)* | No DMs, no channels, no media at launch. One room mirrors the product (one node, one group in the field) and keeps Phase 03 small. Revisit only after Phase 03 is alive. |
+| **Product framing: a modern walkie-talkie** *(2026-07-25)* | Encrypted messaging for whoever is inside a building, or within radio range of the node. "Walkie-talkie" is the *metaphor* — group, range-bound, immediate, no dialling and no accounts — **not** voice: it stays text (media is still rejected). Range is enforced by physics rather than policy, which is the honest version of a geofence: if you can reach the node you are in the group, and if you walk out you are not. |
+| **Messages are encrypted end to end; the node relays ciphertext** *(2026-07-25)* | Per-pair keys from an X25519 exchange at pairing, confirmed by a short code **shown on the node's OLED** — authenticated pairing with no server and no shared secret typed twice. The node can schedule and queue a message from its length and addressee alone, so it never needs the body. **This does not reverse the rejected item below:** encrypting the *track log at rest* with an eFuse-burned key is still rejected. Message confidentiality in flight is a different threat model, and §3 already carried a per-client `key[32]` from pairing. Metadata — who talks to whom, when, how long — remains visible to the node, and the UI must not imply otherwise. |
+| **Each user's messages live on their own device** *(2026-07-25, supersedes "no DMs")* | Durable history is a **Room (SQLite)** database on the phone; the node keeps only a short ring for backfill plus undelivered dead-drop traffic, and holds those as ciphertext it cannot read. This supersedes the "no DMs" half of the 2026-07-20 chat decision — addressed messages are the point of a walkie-talkie with named handsets — while the *shared channel* stays exactly one, text only. Rationale: the node is a relay you might leave behind, so the copy that matters belongs to the person who sent or received it. |
 | **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Shared field node stands: one node, multiple phones, everyone on one map. (The client later moved from PWA to native Android — see the superseding row above.) |
 
 ### REJECTED — do not re-propose
@@ -106,6 +109,28 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | Magnetometer heading | Course-over-ground from GNSS is sufficient. |
 | PostGIS / cloud backend / fleet mode | No server. The node is the authority. |
 | Copying Meshtastic firmware code | GPL. Reading for architecture ideas is fine; copying binds the licence. Writing from the protocol spec is cleaner and more instructive. |
+
+### What makes this one different *(2026-07-25)*
+
+Group messaging with no infrastructure is a solved problem — phones can mesh among themselves and need nothing bought. If chat were the goal there would be no reason to build this. So the node has to earn its place by being what a pile of phones structurally cannot be: **infrastructure you carry**. Five pillars, each impossible for a phone-only mesh:
+
+| Pillar | What it means | Why a phone mesh cannot |
+|---|---|---|
+| **Memory** | The node logs every fix with a monotonic seq and serves any client its exact delta on return; each phone keeps its own durable copy in Room. Two tiers: the node is the relay and the dead-drop, the device is the archive. | A mesh remembers only what a present device holds; nothing stays awake to hand you what you missed. |
+| **Authority** | One place decides what exists — seq, roster, admission — and states its reasons. Clients own only their cursors. | Peers with equal claim to truth must reconcile it: consensus, in a walking group. |
+| **Range** | Licence-free LoRa measured in kilometres, from a fixed point, nobody needed in between. | Mesh reach is crowd density. Two people over a ridge have no path. |
+| **Truth** | GNSS position *and* GNSS time from the constellation, uncertainty rendered on every point. | A phone with no signal has neither a trustworthy clock nor a fix to share. |
+| **Endurance** | A stated power ladder: services shed in a fixed order, each step announced with its reason. | Every phone guessing its own battery policy gives the group no predictable behaviour. |
+
+**The three features that make it itself** — cut these and it becomes a generic tracker:
+
+1. **The airtime economy, made visible** *(Phase 04)* — the cost of a message in ms *before* sending, each client's share of the hour, a queue you can cancel or promote, and a name rather than a spinner when you are behind. Every other radio product hides this; hiding it is why they feel broken on a slow link.
+2. **The encrypted dead-drop** *(Phase 04b)* — the node holds sealed messages for people who are not here *yet* and hands them over on arrival, plus a *last seen* answer from its own log. It can queue and schedule them without being able to read them. Only possible because something stayed awake and remembered.
+3. **The power ladder** *(Phase 06)* — serve everything → BLE only → beacon only → sleep, each rung at a stated threshold with a coulomb-counter estimate. A group can plan around a node that says what it is about to stop doing.
+
+Also planned, both falling out of hardware already on the board: **time service** from the GNSS 1PPS pin (trustworthy timestamps with no internet, and timeline repair for records logged without a fix) and **node-served PMTiles** so a phone that has never been to this valley still gets a basemap *(Phase 06b)*. And a **two-node LoRa link** — exactly two boards, statically paired, never a mesh, because the airtime arithmetic stops being explainable past one hop *(Phase 06)*.
+
+> The rule underneath all of it: **the constraint is the interface.** Duty cycle, battery, storage and range are not problems to hide from the user — they are the only genuinely interesting content this product has, so they get rendered rather than smoothed over.
 
 ### Hobby constraints (these override everything else)
 
@@ -359,7 +384,7 @@ Manifest permissions (Android 12+):
 |---|---|---|
 | Language / UI | Kotlin + Jetpack Compose | Single module to start; protocol code in a plain-Kotlin module for CLI/test reuse |
 | Map | MapLibre Android SDK + `pmtiles` | Basemap tiles pulled from the node over WiFi once, cached on the phone |
-| Local store | Room (SQLite) | Holds cursor + history → reconnect is a delta |
+| Local store | **Room (SQLite)** | The durable copy of *this user's* messages and track (2026-07-25). Lightweight, bundled with Android, no server. Holds cursors so reconnect is a delta. |
 | Background sync | Foreground service, `connectedDevice` type | BLE sync with the screen off — the reason the app exists |
 | Transports | BLE GATT (always) + OkHttp WebSocket over SoftAP (bulk/live) | Bind sockets to the WiFi `Network` object so Android's mobile-data fallback cannot steal the session |
 | Tests | JUnit (codec vs golden vectors), instrumented test against the mock node | Protocol module runs on JVM — no device needed for codec work |
@@ -385,6 +410,27 @@ Google's agentic Android tools (`developer.android.com/tools/agents`) are the te
 Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
 > **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §07, alongside the original wireframes and a table of where the build diverged from them. Captured 2026-07-25, Phase 02 against the mock.
+
+### Local store and crypto *(2026-07-25)*
+
+The phone holds the copy that matters; the node is a relay you might walk away from.
+
+```
+Room (SQLite), app-private storage
+  message   id, peerId|CHANNEL, dir, seqNode, body, epoch, lane, state, airtimeMs
+  peer      clientId, callsign, pubKey, lastSeen, lastLat/Lon/hdop
+  track     seq PRIMARY KEY, 32-byte record blob        ← survives a reinstall of the node
+  cursor    nodeId, posSeq, msgSeq                      ← one row per node, keyed by URL/id
+  outbox    msgId, ciphertext, addressee, queuedAt, reason
+```
+
+Room, not SQLDelight or a file format: it ships with Android, it is the §6 choice already, and a hobby build should not carry a persistence framework it has to think about. Message bodies are stored decrypted in app-private storage — a phone-level threat is out of scope, and pretending otherwise with a passphrase nobody types would be theatre. SQLCipher stays a later option if that changes.
+
+**Key model.** X25519 at pairing → a per-pair shared secret; the shared channel gets a group key issued by the node and rotated when the roster changes. Bodies are sealed with an AEAD (XChaCha20-Poly1305 — Monocypher on the ESP32, Tink on Android), so the node schedules from `{addressee, length}` and never sees plaintext.
+
+**Pairing is confirmed on the node's OLED.** A six-digit code appears on the 1.3" display; you confirm it on the phone. That is authenticated key exchange with no server, no QR, and no secret typed twice — and it uses a screen the board already has, which is the sort of thing only a project with hardware can do.
+
+**Stated honestly in the UI:** the node cannot read message bodies, but it *does* see who talks to whom, when, and how long the message is. Traffic analysis is not defended against. A "secure" badge that implies otherwise would break the §6 honesty rule harder than any spinner.
 
 ### UI rules
 
@@ -436,14 +482,30 @@ Per-client cursors, message history, chat (one channel, text only), everyone see
 Now the board comes out. ESP-IDF toolchain up, **USB-JTAG debugger working with a real breakpoint**, LittleFS mounted, SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: **point the app's WebSocket at the real SoftAP**, and **build the BLE GATT path against the real board** (§6: BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes.
 **⚑ NATURAL STOPPING POINT.** Three phones on a shared map, served by the real T-Beam. This is a complete project. Stopping here is success.
 
-### Phase 04 — Make it fight · *two weekends*
+### Phase 04 — Make it fight, and show the price · *two weekends*
 Deficit round-robin, priority lanes, admission control, backlog interleaving — hardened against **real** airtime timing (the mock could exercise the logic; only hardware exercises the clock). Test by writing a client that deliberately floods. Most transferable engineering in the project.
+
+Same phase, same data, one more step: the **airtime economy as a feature** — cost in ms shown *before* sending, per-client share of the hour, a queue you can cancel or promote to lane 0 (and see what that costs), and a name rather than a spinner when you are behind.
+
+### Phase 04b — Encryption, the device store, and the dead-drop · *two weekends*
+Three things that only make sense together, and the phase where the walkie-talkie framing (§2, 2026-07-25) becomes real:
+
+1. **Pairing and keys** — X25519 at pairing, six-digit confirmation on the node's OLED, per-pair secrets plus a node-issued group key for the shared channel.
+2. **Room on the phone** — the durable archive of this user's messages and track, so history survives the node being switched off, reflashed or left behind.
+3. **The dead-drop** — the node holds *sealed* messages addressed to a callsign that is not here yet, plus the stretch of track they missed, and hands them over on arrival. It schedules from `{addressee, length}` and never sees a body. Plus *last seen* from its own log ("charlie, 40 min ago, 300 m NE").
+
+Wire additions are small: an addressee, a hold-until rule, and a sealed body. Everything else — cursors, backlog, queue reasons — already exists and works on ciphertext unchanged.
 
 ### Phase 05 — Fix the drift · *one weekend*
 By now the codec, hand-written twice (C on the node, Kotlin in the app), has bitten you. *That* is when the schema and codegen arrive.
 
 ### Phase 06 — Optional: the link out
 LoRa under the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only if there is somewhere to take it where WiFi range genuinely runs out.
+
+Two extensions belong here because both need the radio first. **The power ladder**: serve everything → BLE only → beacon only → sleep, each rung at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long it lasts — beacon-only matters most, since a nearly flat node should still say where it is. **The two-node link**: a second board, statically paired, exchanging positions and short messages across one LoRa hop so the group spans a ridge. Exactly two, never a mesh — the airtime arithmetic stops being explainable past one hop.
+
+### Phase 06b — Optional: time and the map, from the node
+Two services that fall out of hardware already on the board. **Time**: the GNSS 1PPS pin makes the node a trustworthy clock with no internet and no cell, so phones take time from it — which is what makes timestamps comparable across the group and lets records logged without a fix have their timeline repaired. **The map**: PMTiles served from the node over the SoftAP, so a phone that has never been to this valley still gets a basemap from the thing on the table.
 
 ### Phase 07 — Optional: background sync polish and CLI
 Foreground-service BLE sync hardening (One UI battery exemptions, resume-from-cursor soak tests); JVM CLI (Clikt + jSerialComm) over USB serial reusing the shared Kotlin codec. A browser client could also return here as an extra, never as the primary.

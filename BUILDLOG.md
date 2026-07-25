@@ -1,5 +1,34 @@
 # Build log
 
+## 2026-07-25 (evening) — what makes this one different, and a doc that stopped contradicting itself
+
+**Tried:** no code. Surveyed how the phone-only side of this space has moved on, and used it to answer a question the plan had been dodging: *if group messaging needs no hardware at all, why does this project buy a board?*
+
+**The answer, written into §01 and PROJECT.md §2.** Chat is not the differentiator and should never become one. The node earns its place by being what a pile of phones structurally cannot be — infrastructure you carry — across five pillars: **memory** (it remembers when phones forget), **authority** (one place decides what exists), **range** (kilometres from a fixed point with nobody in between), **truth** (position *and* time from the sky, uncertainty always rendered), **endurance** (a stated power ladder rather than a surprise death). Each pillar has a one-line reason a mesh of phones cannot do it, which is the honest test of whether the hardware is justified.
+
+**Three features named as the identity**, i.e. cut these and this becomes a generic tracker:
+
+1. **The airtime economy, made visible** (Phase 04) — cost in ms *before* you send, each client's share of the hour, a queue you can cancel or promote, and a name instead of a spinner when you are behind. The scheduler already computes all of it; the difference is whether the user is allowed to see it.
+2. **The dead-drop** (new Phase 04b) — the node holds messages and missed track for people who are not here *yet*, and hands it over when they walk into range, plus *last seen* from its own log. Needs nothing new on the wire beyond an addressee and a hold-until rule.
+3. **The power ladder** (Phase 06) — serve everything → BLE only → beacon only → sleep, each rung at a stated threshold with a coulomb-counter estimate. Beacon-only is the one that matters: a nearly flat node should still say where it is, because that is when someone is looking for it.
+
+Also planned: **two-node LoRa link** — exactly two boards, statically paired, *never* a mesh, because the airtime arithmetic stops being explainable past one hop; and **Phase 06b**, time service off the GNSS 1PPS pin plus node-served PMTiles, both of which fall out of hardware already on the board.
+
+**Surprised:** how much of the master plan still described the *asset tracker* the project stopped being three pivots ago. §02 listed a reed switch and a solar panel as purchases, the block diagram had a tamper switch wired to GPIO, the sensor table gave the IMU "tamper free-fall detection" as a job, the flags table documented bit 4 as live tamper, and the events row promised to push tamper alerts — all of it rejected in §01's own decision log, sitting a few hundred lines above. A decision record that contradicts itself is worse than no record: the next session has to guess which half is current. Stripped all of it, marked bit 4 reserved to match the wire format, and rewrote the OTA note — the two app slots stay for *rollback* of a bad USB flash, which is not the same as shipping OTA updates, and the doc had been using one to justify the other.
+
+**Then the framing sharpened, same evening: this is a modern walkie-talkie.** Encrypted text for whoever is inside the building or within radio range — group, range-bound, immediate, no dialling and no accounts. *Walkie-talkie* stays a metaphor: it is text, media is still rejected. The nice part is that range needs no policy — reach the node and you are in the group, walk out and you are not, which is the honest version of a geofence.
+
+Two decisions came with it, both recorded in §2 with dates:
+
+- **Messages are end to end encrypted.** X25519 at pairing, per-pair secrets plus a node-issued group key for the shared channel, bodies sealed with an AEAD. The node schedules from `{addressee, length}` and never sees a body — which works *because* the scheduler was written against length and lane rather than content, so cursors, backlog and queue reasons all keep working on ciphertext unchanged. Pairing is confirmed by a **six-digit code on the node's OLED**: authenticated key exchange with no server, no QR, no secret typed twice, using a screen the board already has.
+- **Each user's durable copy lives on their own phone**, in Room — message, peer, track, cursor and outbox tables. The node keeps a short backfill ring plus undelivered dead-drop traffic and nothing else, because the node is a relay you might switch off, reflash or walk away from.
+
+Two collisions with existing decisions, handled rather than papered over. The 2026-07-20 chat entry said *no DMs*; addressed messages are the entire point of a walkie-talkie with named handsets, so that half is explicitly superseded while the shared channel stays exactly one, text only. And §2 rejects **eFuse/AES-GCM log encryption** — that rejection stands and is *not* what this is: encrypting the track log at rest against someone holding the board is a different threat model from message confidentiality in flight. Wrote that distinction into both docs so a future session doesn't read one as reversing the other.
+
+Also written down, because it is the kind of thing products lie about: the node cannot read bodies but **does** see who talks to whom, when, and how long. Traffic analysis is undefended, and bodies sit decrypted in app-private storage on the phone. A "secure" badge implying otherwise would break the honesty rule harder than any spinner.
+
+**Next:** unchanged in the near term — the phone's own GPS behind "share my position", Room for the track, then two clients with one flooding. Encryption, the device store and the dead-drop are now one phase (04b), all of it after Phase 03; nothing here moves the natural stopping point.
+
 ## 2026-07-25 (later) — cursors, backlog resume, and a Link screen instead of a connect gate
 
 **Tried:** the two Phase 02 items left after the forward flow — per-client position cursors and backlog resume — plus a proper README, plus the connection surface the app had been missing.

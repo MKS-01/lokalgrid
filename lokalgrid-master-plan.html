@@ -246,8 +246,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <tr><td>Motion-gated logging</td><td class="m">—</td><td class="m">yes</td><td>IMU interrupt config, wake logic</td></tr>
         <tr><td>On-device geofencing</td><td class="m">—</td><td class="m">yes</td><td>Polygon compiler, hysteresis</td></tr>
         <tr><td>Out-of-range alerting</td><td class="m">—</td><td class="m">yes</td><td>LoRa beacon, duty-cycle budget</td></tr>
-        <tr><td>Tamper detection</td><td class="m">—</td><td class="m">yes</td><td>Free-fall/tap ISR, case switch</td></tr>
-        <tr><td>Multi-client arbitration</td><td class="m">—</td><td class="m">yes</td><td>Scheduler, per-client cursors, backpressure</td></tr>
+                <tr><td>Multi-client arbitration</td><td class="m">—</td><td class="m">yes</td><td>Scheduler, per-client cursors, backpressure</td></tr>
       </tbody>
     </table></div>
     <h3>Design commitments</h3>
@@ -266,12 +265,42 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
       <li><b>Constrained storage.</b> Fixed-width records, ring buffers, and the reason parsing is the enemy of seeking.</li>
     </ul>
     <p>By the end you can point a sniffer at any commercial BLE gadget and recognise what its designers did, and where they cut corners.</p>
+
+    <h2>What makes this one different</h2>
+    <div class="note ok"><b>Framing, 2026-07-25 &mdash; a modern walkie-talkie.</b> Encrypted messaging for whoever is inside the building, or within radio range of the node. <em>Walkie-talkie</em> is the metaphor &mdash; group, range-bound, immediate, no dialling and no accounts &mdash; <b>not</b> voice: this stays text. Range is enforced by physics rather than policy, which is the honest version of a geofence: reach the node and you are in the group; walk out and you are not. Each user's messages live in a <b>Room (SQLite)</b> database on their own phone; the node relays and holds only what is undelivered, as ciphertext it cannot read.</div>
+    <p>Group messaging without infrastructure is a solved problem: phones can mesh over BLE among themselves, relay for each other, and need nothing bought. If chat alone were the goal, there would be no reason to build this &mdash; and no reason to buy a board.</p>
+    <p>So the node has to earn its place, and it earns it by being the one thing a pile of phones cannot be: <b>a piece of infrastructure you carry</b>. It stays awake when the phones sleep, it remembers when they forget, it holds a radio none of them have, and it knows the time and its own position from the sky rather than from a network. Everything below follows from that, and each pillar is something a phone-only mesh structurally cannot do.</p>
+
+    <div class="tw"><table>
+      <thead><tr><th>Pillar</th><th>What it means</th><th>Why a phone mesh cannot</th></tr></thead>
+      <tbody>
+        <tr><td><b>Memory</b></td><td>Two tiers. The node logs every fix with a monotonic sequence number, serves any client its exact delta, and holds sealed traffic for people who are not here yet; each phone keeps its own durable archive in Room. Relay and dead-drop on one side, archive on the other.</td><td>A mesh only remembers what a present device happens to be holding &mdash; nothing stays awake to hand you what you missed.</td></tr>
+        <tr><td><b>Authority</b></td><td>One place decides what exists &mdash; sequence numbers, roster, admission &mdash; and states its reasons. Clients own only their own cursors.</td><td>Peers with equal claim to the truth have to reconcile it. That is a distributed-consensus problem nobody wants in a walking group.</td></tr>
+        <tr><td><b>Range</b></td><td>A licence-free LoRa link measured in kilometres, from a fixed point, with no people needed in between.</td><td>Mesh reach is a function of crowd density. Two people over a ridge from each other have no path at all.</td></tr>
+        <tr><td><b>Truth</b></td><td>GNSS position <em>and</em> GNSS time, straight from the constellation, with uncertainty rendered on every point.</td><td>Phones without signal have neither a trustworthy clock nor a fix to share.</td></tr>
+        <tr><td><b>Endurance</b></td><td>A stated power ladder: as the cell drains the node sheds services in a fixed order and announces each step and its reason.</td><td>Every phone independently guessing at its own battery policy gives a group no shared, predictable behaviour.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>The three features that make it itself</h3>
+    <p>Most of the roadmap is table stakes. These are the ones that would be missed if they were cut &mdash; the reason this is a specific thing rather than a generic tracker:</p>
+    <ul>
+      <li><b>The airtime economy, made visible.</b> One radio, a hard 1&nbsp;% duty cycle, and up to nine clients means airtime is a scarce shared resource with a price. So show the price: what a message costs in milliseconds before it is sent, what share of the hour each client has spent, and why yours is behind someone else's. Every other radio product hides this behind a spinner. Hiding it is what makes those products feel broken when the link is slow &mdash; the user is never told they are queued behind physics.</li>
+      <li><b>The encrypted dead-drop.</b> The node holds sealed messages for people who are not here <em>yet</em>. Walk into range tomorrow and it hands over what was left for you, plus where everyone was while you were gone. It queues and schedules that traffic from <code>{addressee, length}</code> alone and never sees a body. Only possible because something stayed awake and remembered &mdash; the memory pillar turned into a feature you can name.</li>
+      <li><b>The power ladder.</b> Runtime as a visible contract rather than a surprise: serve everything &rarr; BLE only &rarr; beacon only &rarr; sleep, each step tied to a stated battery threshold, announced to every client with the reason and an estimate from the coulomb counter (&ldquo;3&nbsp;h like this, 40&nbsp;h if the AP drops&rdquo;). A group can plan around a node that tells them what it is about to stop doing.</li>
+    </ul>
+    <h3>Encryption, and where the messages actually live</h3>
+    <p>Keys come from an X25519 exchange at pairing, confirmed by a <b>six-digit code shown on the node's own OLED</b> &mdash; authenticated key exchange with no server, no QR and no secret typed twice, using a screen the board already has. Per-pair secrets for addressed messages; a node-issued group key, rotated when the roster changes, for the shared channel. Bodies are sealed with an AEAD, so the node can schedule and queue a message from its addressee and length alone.</p>
+    <p>The durable copy lives on the phone, in <b>Room</b> &mdash; message, peer, track, cursor and outbox tables in app-private storage. The node keeps a short backfill ring plus undelivered dead-drop traffic and nothing else, because the node is a relay you might switch off, reflash, or walk away from; the copy that matters belongs to the person at either end of the conversation.</p>
+    <div class="note bad"><b>What this does not protect.</b> The node cannot read message bodies, but it does see <em>who</em> talks to whom, <em>when</em>, and <em>how long</em> the message was. Traffic analysis is not defended against, and message bodies sit decrypted in app-private storage on the phone. This is written down because a &ldquo;secure&rdquo; badge implying more would break the honesty rule harder than any spinner ever could. Separately: encrypting the <em>track log at rest</em> with an eFuse-burned key is still rejected (section 01) &mdash; that is a different threat model and it has not changed.</div>
+
+    <div class="note"><b>The rule that keeps this honest.</b> Every one of these is a way of saying the same thing: <em>the constraint is the interface</em>. Duty cycle, battery, storage and range are not problems to hide from the user &mdash; they are the product's only genuinely interesting content, so they get rendered rather than smoothed over.</div>
   </div>
 </section>
 
 <!-- ============ 02 HARDWARE ============ -->
 <section id="hardware">
-  <div class="rail"><span class="no">02</span>Hardware<p>All of this is on the board already. Only the antenna, enclosure and reed switch are additions.</p></div>
+  <div class="rail"><span class="no">02</span>Hardware<p>All of this is on the board already. Only the two antennas and a cell are additions.</p></div>
   <div class="body">
     <h2>Hardware architecture</h2>
     <div class="note ok"><b>What you have.</b> The T-Beam Supreme is the S3-Core v3.0 module seated in a baseboard — which is why the silkscreen reads S3-Core. That gives you the full set: ESP32-S3, SX1262, L76K GNSS, AXP2101, QMI8658 IMU, QMC6310 magnetometer, BME280, PCF8563 RTC, 1.3" OLED, microSD and an 18650 holder. Nothing in this plan needs a breakout board. <b>Confirm the LoRa band from the silkscreen beside the SMA connector before buying an antenna</b> — variants exist at 433, 868 and 915 MHz and they are not interchangeable.</div>
@@ -295,7 +324,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <path class="bus" d="M230 232 H326"/><text class="buslab" x="278" y="227">I²C</text>
 
         <rect class="blk" x="40" y="262" width="190" height="40" rx="4"/>
-        <text class="tl" x="52" y="280">Tamper switch</text><text class="sb" x="52" y="295">reed, wake-on-low</text>
+        <text class="tl" x="52" y="280">User button</text><text class="sb" x="52" y="295">emergency, wake-on-low</text>
         <path class="bus" d="M230 282 H326"/><text class="buslab" x="278" y="277">GPIO</text>
 
         <rect class="blk r" x="670" y="112" width="190" height="40" rx="4"/>
@@ -320,7 +349,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <path class="bus" d="M450 300 V336"/>
 
         <rect class="blk p" x="40" y="342" width="190" height="40" rx="4"/>
-        <text class="tl" x="52" y="360">18650 + solar</text><text class="sb" x="52" y="375">onboard holder · 6 V 1 W</text>
+        <text class="tl" x="52" y="360">18650 cell</text><text class="sb" x="52" y="375">onboard holder · USB-C charge</text>
         <path class="bus" d="M230 362 H326"/>
 
         <rect class="blk" x="670" y="342" width="190" height="40" rx="4"/>
@@ -339,7 +368,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <tr><td class="m">UART1</td><td>L76K GNSS</td><td class="m">9600 → 115200</td><td>Raise the baud in firmware init for faster fix data</td></tr>
         <tr><td class="m">SPI2</td><td>SX1262</td><td class="m">8 MHz</td><td>Dedicated. DIO1 as IRQ, BUSY line respected</td></tr>
         <tr><td class="m">SPI3</td><td>microSD</td><td class="m">20 MHz</td><td>Dedicated. Mount lazily, unmount before sleep.</td></tr>
-        <tr><td class="m">GPIO</td><td>1PPS, IMU INT, reed switch</td><td class="m">—</td><td>All RTC-capable pins so they can wake deep sleep</td></tr>
+        <tr><td class="m">GPIO</td><td>1PPS, IMU INT, user button</td><td class="m">—</td><td>All RTC-capable pins so they can wake deep sleep</td></tr>
       </tbody>
     </table></div>
 
@@ -350,8 +379,6 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <tr><td>Active GNSS antenna, u.FL</td><td class="m">₹300</td><td>Biggest single improvement to fix quality and time-to-first-fix. Do this before any filtering work.</td></tr>
         <tr><td><b>Band-matched whip, SMA</b></td><td class="m">₹200</td><td>Must match the silkscreen marking beside the SMA. A 433 whip on an 868 radio gives dreadful SWR and slowly cooks the PA. Never power the SX1262 with no antenna at all.</td></tr>
         <tr><td>IP65 enclosure + gland</td><td class="m">₹400</td><td>Needs an RF-transparent lid. Metal boxes make excellent Faraday cages and useless trackers.</td></tr>
-        <tr><td>Reed switch + magnet</td><td class="m">₹60</td><td>Case-open detection with zero standby current.</td></tr>
-        <tr><td>6 V 1 W solar panel</td><td class="m">₹350</td><td>Into the AXP2101 charge input. Turns weeks of runtime into indefinite for outdoor placement.</td></tr>
         <tr><td>Flat-top 18650, 3500 mAh</td><td class="m">₹600</td><td>The onboard holder is built to the original 18650 spec — protected and button-top cells are often 70 mm and will not fit. Buy a known brand flat-top.</td></tr>
       </tbody>
     </table></div>
@@ -416,7 +443,7 @@ otadata    , data, ota    , 0xf000 , 0x2000
 app0       , app , ota_0  , 0x10000, 0x280000   <i>// 2.5 MB</i>
 app1       , app , ota_1  ,        , 0x280000   <i>// OTA slot</i>
 storage    , data, littlefs,       , 0x2C0000   <i>// ~2.8 MB: logs + web assets</i></pre>
-    <p>Two OTA slots is not optional on a device several people depend on — a bad flash must roll back rather than brick.</p>
+    <p>The two app slots stay for <em>rollback</em>: a bad USB flash falls back to the last good image rather than bricking the node. Over-the-air update itself is rejected (section 01) — nobody depends on this device enough to justify the delivery path, and it is flashed over USB.</p>
 
     <h4>sdkconfig settings that actually matter</h4>
 <pre>CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      <i>// default is 1; 9 is NimBLE's hard ceiling — the multi-client switch</i>
@@ -451,9 +478,9 @@ CONFIG_HTTPD_WS_SUPPORT=y</pre>
     <div class="tw"><table>
       <thead><tr><th>Missing part</th><th>What breaks</th><th>Fallback</th></tr></thead>
       <tbody>
-        <tr><td>IMU</td><td>Motion gate, tamper free-fall detection</td><td>Gate on GNSS speed with a 5-minute still timeout. Costs roughly 3× the idle power, so treat an IMU failure as a battery alarm.</td></tr>
+        <tr><td>IMU</td><td>Motion gate for logging</td><td>Gate on GNSS speed with a 5-minute still timeout. Costs roughly 3× the idle power, so treat an IMU failure as a battery alarm.</td></tr>
         <tr><td>BME280</td><td>Barometric altitude, temperature</td><td><code>baro</code> and <code>tmp</code> write 0x8000. The app renders GNSS altitude only and stops offering altitude smoothing.</td></tr>
-        <tr><td>microSD</td><td>Cold archive beyond ~7 days</td><td>Internal LittleFS ring only. History shortens; sync urgency in the app increases. Everything else is identical.</td></tr>
+        <tr><td>microSD</td><td>Cold archive beyond ~7 days <i>(rejected)</i></td><td>Internal LittleFS ring only. History shortens; sync urgency in the app increases. Everything else is identical.</td></tr>
         <tr><td>PCF8563 RTC</td><td>Wall-clock time across a full power loss</td><td>Monotonic counter plus the <code>time_valid</code> flag — the app repairs the timeline. This path exists anyway for no-fix runs, so it is already tested. Discipline the RTC from GNSS on every fix.</td></tr>
         <tr><td>OLED</td><td>Field status without a phone</td><td>Status over BLE only. Add a single status LED blink code for power-on confirmation.</td></tr>
         <tr><td>Magnetometer</td><td>Heading when stationary</td><td>Course-over-ground from GNSS, which is meaningless below ~2 km/h. Report heading as unknown rather than noise.</td></tr>
@@ -466,7 +493,7 @@ CONFIG_HTTPD_WS_SUPPORT=y</pre>
   │  motion detected
   ▼
 <b>ACTIVE</b>      periodic fix, log, evaluate geofences
-  │  geofence exit or tamper       │  no motion for N min
+  │  geofence exit                 │  no motion for N min
   ▼                                 ▼
 <b>ALERT</b>       beacon + fast fix    <b>IDLE</b>
   │  acknowledged from app
@@ -551,7 +578,7 @@ state = point_in_polygon(fix, z) ? INSIDE : OUTSIDE;
         <tr><td class="m">1</td><td>fix_3d</td><td>A 2D fix has fictional altitude — use the barometer instead.</td></tr>
         <tr><td class="m">2</td><td>motion</td><td>IMU reported movement at sample time.</td></tr>
         <tr><td class="m">3</td><td>trip_start</td><td>First point after wake. Segments trips with no heuristics.</td></tr>
-        <tr><td class="m">4</td><td>tamper</td><td>Case opened or free-fall detected since the last point.</td></tr>
+        <tr><td class="m">4</td><td><i>reserved</i></td><td>Unused. Was tamper; tamper detection is rejected (section 01). Leave zero, validate on read.</td></tr>
         <tr><td class="m">5</td><td>charging</td><td>From the PMU. Useful for correlating power anomalies.</td></tr>
         <tr><td class="m">6–7</td><td>reserved</td><td>Leave zero, validate on read.</td></tr>
         <tr><td class="m">8–15</td><td>zone_mask</td><td>Which of the first 8 geofences contained this point.</td></tr>
@@ -567,7 +594,7 @@ state = point_in_polygon(fix, z) ? INSIDE : OUTSIDE;
         <tr><td>Config</td><td class="m">read / write</td><td>Whole-struct read-modify-write: intervals, thresholds, beacon policy, device name.</td></tr>
         <tr><td>Control</td><td class="m">write</td><td><code>LIST</code>, <code>START(day,offset)</code>, <code>ACK(seq)</code>, <code>STOP</code>, <code>ERASE(day)</code>, <code>PUSH_ZONES</code>, <code>ACK_ALERT</code>, <code>OTA_BEGIN</code>.</td></tr>
         <tr><td>Data</td><td class="m">notify</td><td>Chunk stream, framed below.</td></tr>
-        <tr><td>Events</td><td class="m">notify</td><td>Geofence and tamper events pushed immediately on connect if unacknowledged.</td></tr>
+        <tr><td>Events</td><td class="m">notify</td><td>Geofence events pushed immediately on connect if unacknowledged.</td></tr>
       </tbody>
     </table></div>
 <pre><u>+--------+--------+---------------------+---------+</u>
@@ -1053,9 +1080,17 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
     </div></div>
 
     <div class="phase"><div class="n">04</div><div>
-      <h4>Make it fight</h4>
+      <h4>Make it fight — and show the price</h4>
       <p>Now the interesting part. Deficit round-robin scheduling, priority lanes, admission control, backlog interleaving — hardened against <b>real</b> airtime timing (the mock exercised the logic; only hardware exercises the clock). Test it by writing a client that deliberately floods. This is the phase with the most transferable engineering in it.</p>
+      <p>It is also where the <b>airtime economy</b> becomes a feature rather than a scheduler: a cost in milliseconds shown <em>before</em> you send, each client's share of the hour, a queue you can act on (cancel, or promote to lane 0 and see what that costs), and the honest answer to "why is mine behind" — a name, not a spinner. Same phase because it is the same data; the difference is whether the user is allowed to see it.</p>
       <em>two weekends · the reason to build this at all</em>
+    </div></div>
+
+    <div class="phase"><div class="n">04b</div><div>
+      <h4>Encryption, the device store, and the dead-drop</h4>
+      <p>Three things that only make sense together, and the phase where the walkie-talkie framing becomes real. <b>Pairing and keys:</b> X25519 at pairing, six digits on the node's OLED to confirm, per-pair secrets plus a node-issued group key for the shared channel. <b>Room on the phone:</b> the durable archive of this user's messages and track, so history survives the node being switched off, reflashed or left behind. <b>The dead-drop:</b> the node holds sealed messages for a callsign that is not here yet — plus the stretch of track they missed — and hands them over on arrival, alongside a <em>last seen</em> answer from its own log.</p>
+      <p>The wire additions are small: an addressee, a hold-until rule, a sealed body. Cursors, backlog and queue reasons already exist and work on ciphertext unchanged, which is the payoff for having scheduled by length rather than content all along.</p>
+      <em>two weekends · the memory pillar, made usable</em>
     </div></div>
 
     <div class="phase"><div class="n">05</div><div>
@@ -1067,7 +1102,14 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
     <div class="phase"><div class="n">06</div><div>
       <h4>Optional: the link out</h4>
       <p>LoRa underneath the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only worth doing if you have somewhere to take it where WiFi range genuinely runs out.</p>
+      <p>Two extensions belong here, both of which need the radio to exist first. <b>The power ladder</b>: serve everything &rarr; BLE only &rarr; beacon only &rarr; sleep, each step at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long each rung lasts. Beacon-only matters most — a node with a nearly flat cell should still say where it is, because that is when someone is looking for it. And <b>the two-node link</b>: a second board, statically paired, exchanging positions and short messages across the LoRa hop so the group spans a ridge. Exactly two, never a mesh — the airtime arithmetic stays honest with one hop and stops being explainable past it.</p>
       <em>open-ended · optional by design</em>
+    </div></div>
+
+    <div class="phase"><div class="n">06b</div><div>
+      <h4>Optional: time and the map, from the node</h4>
+      <p>Two services that fall out of hardware already on the board. <b>Time</b>: the GNSS 1PPS pin makes the node a trustworthy clock with no internet and no cell, so phones take time from it — which is what makes chat timestamps and track alignment comparable across a group, and what lets records logged without a fix have their timeline repaired afterwards. <b>The map</b>: PMTiles served from the node over the SoftAP, so a phone that has never been to this valley still gets a basemap from the thing sitting on the table.</p>
+      <em>open-ended · the node as infrastructure, taken literally</em>
     </div></div>
 
     <div class="phase"><div class="n">07</div><div>
@@ -1161,8 +1203,8 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
       <thead><tr><th></th><th>Direction</th><th>Verdict</th></tr></thead>
       <tbody>
         <tr><td class="m"><b>A</b></td><td><b>Shared field node, as planned.</b> Board is the station; up to 3 phones connect; everyone sees everyone on one map with honest uncertainty; one chat.</td><td><b>PICKED — 2026-07-20.</b> Still novel, already scoped, nothing thrown away.</td></tr>
-        <tr><td class="m">B</td><td><b>Field instrument station.</b> Same chassis, but the PWA can re-task the SX1262 between tracker / TinyGS satellite RX / RS41 sonde RX / sniffer modes — one mode owns the radio at a time.</td><td>Not rejected — <b>parked</b>. The modes remain adjacent projects (section 13); nothing in Phases 01–05 blocks adding them later. Tilts the band preference toward 433.</td></tr>
-        <tr><td class="m">C</td><td><b>Rebuild on Reticulum</b> — standalone RNS transport node with a PWA gateway.</td><td>Rejected: adopts a large stack instead of hand-writing the protocol — against the learning goals.</td></tr>
+        <tr><td class="m">B</td><td><b>Field instrument station.</b> Same chassis, but the app can re-task the SX1262 between tracker / TinyGS satellite RX / RS41 sonde RX / sniffer modes — one mode owns the radio at a time.</td><td>Not rejected — <b>parked</b>. The modes remain adjacent projects (section 13); nothing in Phases 01–05 blocks adding them later. Tilts the band preference toward 433.</td></tr>
+        <tr><td class="m">C</td><td><b>Rebuild on Reticulum</b> — standalone RNS transport node with an app gateway.</td><td>Rejected: adopts a large stack instead of hand-writing the protocol — against the learning goals.</td></tr>
         <tr><td class="m">D</td><td><b>Pivot to existing firmware</b> (TinyGS / sonde hunting).</td><td>A Saturday detour, not a project. Already blessed as such by the hobby constraints.</td></tr>
       </tbody>
     </table></div>

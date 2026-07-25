@@ -18,6 +18,16 @@ The app is **not gated behind a live connection** — the Link screen (tap the s
 
 **BLE is still Phase 03.** Permissions and onboarding exist; nothing opens a GATT connection. Do not add UI that implies a live BLE link before the board is in hand — the app says `ble link · phase 03 · needs the board` on purpose. No hardware until **Phase 03**, where the toolchain, USB-JTAG breakpoint, SoftAP + BLE advertising, and the un-mockable BLE GATT path all land. The firmware skeleton under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`) is parked until then; ESP-IDF not yet installed on this machine. Repo: github.com/MKS-01/lokalgrid.
 
+## Product framing — a modern walkie-talkie *(2026-07-25)*
+
+Encrypted text for whoever is inside the building or within radio range of the node. **Metaphor, not voice** — media is still rejected. Two decisions follow, both recorded in PROJECT.md §2:
+
+- **Messages are end to end encrypted**; the node relays and dead-drops ciphertext and schedules from `{addressee, length}` alone. Keys from X25519 at pairing, confirmed by a six-digit code on the node's OLED. This does *not* reverse the rejected eFuse/AES-GCM **log-at-rest** encryption — different threat model.
+- **Each user's durable copy lives on their own phone**, in **Room (SQLite)**; the node keeps only a short backfill ring plus undelivered traffic. Addressed messages supersede the "no DMs" half of the 2026-07-20 chat decision; the shared channel is still exactly one, text only.
+- Say plainly in the UI that metadata (who, when, how long) is visible to the node. No "secure" badge implying more.
+
+The identity features, all Phase 04+: **the airtime economy made visible**, **the encrypted dead-drop**, **the power ladder**. The rule underneath: *the constraint is the interface* — duty cycle, battery, storage and range get rendered, never smoothed over.
+
 ## Stack — already decided, do not relitigate
 
 - Firmware: **ESP-IDF v5.x + CMake directly**. Not Arduino, not PlatformIO.
