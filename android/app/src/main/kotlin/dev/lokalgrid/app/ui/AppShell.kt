@@ -41,7 +41,15 @@ private val Mono = FontFamily.Monospace
 enum class Tab(val label: String) { LIVE("Live"), MAP("Map"), CHAT("Chat"), CLIENTS("Clients"), CONFIG("Config") }
 
 @Composable
-fun AppShell(state: LiveState) {
+fun AppShell(
+    state: LiveState,
+    onSendChat: (String, Boolean) -> Unit = { _, _ -> },
+    onSharePosition: () -> Unit = {},
+    onRename: (String) -> Unit = {},
+    onResetTrack: () -> Unit = {},
+    onWriteConfig: (Map<String, String>) -> Unit = {},
+    onReopenSetup: () -> Unit = {},
+) {
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var showDiag by remember { mutableStateOf(false) }
 
@@ -55,11 +63,11 @@ fun AppShell(state: LiveState) {
         AppBar(tab, state, onLongPressTitle = { showDiag = !showDiag })
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
-                Tab.LIVE -> LiveScreen(state)
-                Tab.MAP -> MapScreen(state)
-                Tab.CHAT -> ChatScreen()
-                Tab.CLIENTS -> ClientsScreen(state)
-                Tab.CONFIG -> ConfigScreen()
+                Tab.LIVE -> LiveScreen(state, onSharePosition, onRename, onResetTrack)
+                Tab.MAP -> MapScreen(state, onSharePosition)
+                Tab.CHAT -> ChatScreen(state, onSendChat)
+                Tab.CLIENTS -> ClientsScreen(state, onRename)
+                Tab.CONFIG -> ConfigScreen(state, onWriteConfig, onReopenSetup)
             }
             if (showDiag) DiagnosticsOverlay(state) { showDiag = false }
         }
@@ -73,8 +81,14 @@ private fun SysBar(state: LiveState) {
         Modifier.fillMaxWidth().background(Lg.Deep).padding(horizontal = 12.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text("lokalgrid · node", color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp)
-        Text(if (state.connected) "1 client" else "offline", color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp)
+        Text(
+            if (state.connected) "lokalgrid · node · you are ${state.selfName}" else "lokalgrid · node",
+            color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp
+        )
+        Text(
+            if (state.connected) "${state.clientCount} client${if (state.clientCount == 1) "" else "s"}" else "offline",
+            color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp
+        )
     }
 }
 
@@ -103,8 +117,14 @@ private fun AppBar(tab: Tab, state: LiveState, onLongPressTitle: () -> Unit) {
         when (tab) {
             Tab.LIVE, Tab.MAP ->
                 if (state.connected) Pill("wifi", PillKind.OK) else Pill("connecting", PillKind.NEUTRAL)
-            Tab.CHAT -> Pill("lane 2", PillKind.NEUTRAL)
-            Tab.CLIENTS -> Text("1 of 9", color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp)
+            Tab.CHAT -> {
+                val waiting = state.outbox.count { it.relayReason != null && !it.relayed }
+                if (waiting > 0) Pill("$waiting on airtime", PillKind.LORA) else Pill("lane 2", PillKind.NEUTRAL)
+            }
+            Tab.CLIENTS -> Text(
+                "${state.clientCount} of ${state.cap}",
+                color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp
+            )
             Tab.CONFIG -> Text("admin only", color = Lg.Ink3, fontFamily = Mono, fontSize = 10.sp)
         }
     }
@@ -153,11 +173,18 @@ private fun DiagnosticsOverlay(state: LiveState, onClose: () -> Unit) {
             .padding(16.dp)
     ) {
         SectionLabel("diagnostics · tap to close")
+        InfoRow("node url", state.url)
         InfoRow("status", state.status)
         InfoRow("connected", state.connected.toString())
         InfoRow("fixes received", state.fixCount.toString())
         InfoRow("dropped", state.dropped.toString())
         state.lastDrop?.let { InfoRow("last drop", it) }
+        InfoRow("you", "${state.selfName} (id ${state.selfId})")
+        InfoRow("clients", "${state.clientCount} of ${state.cap}")
+        InfoRow("duty cycle", "${"%.2f".format(state.duty * 100)}%")
+        InfoRow("messages", state.messages.size.toString())
+        InfoRow("waiting on airtime", state.outbox.count { !it.relayed }.toString())
+        state.nodeNotice?.let { InfoRow("node said", it) }
         val r = state.latest
         if (r != null) {
             InfoRow("seq", r.seqLo.toString())

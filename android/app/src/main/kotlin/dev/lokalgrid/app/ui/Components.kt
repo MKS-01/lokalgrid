@@ -14,13 +14,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -139,18 +145,50 @@ fun MeterBar(fraction: Float, color: Color = Lg.Sig) {
     }
 }
 
+/** Single-line monospace input (.inp). Styled by hand — Material's TextField
+ *  chrome fights the instrument look. */
 @Composable
-fun LgButton(text: String, primary: Boolean = false, onClick: () -> Unit = {}) {
-    val border = if (primary) Lg.Lock else Lg.Rule
-    val fg = if (primary) Lg.Lock else Lg.Ink2
+fun LgTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onSubmit: () -> Unit = {},
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(3.dp))
+            .border(BorderStroke(1.dp, Lg.Rule), RoundedCornerShape(3.dp))
+            .padding(horizontal = 9.dp, vertical = 9.dp)
+    ) {
+        if (value.isEmpty()) {
+            Text(placeholder, color = Lg.Ink3, fontFamily = Mono, fontSize = 12.sp)
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = TextStyle(color = Lg.Ink, fontFamily = Mono, fontSize = 12.sp),
+            cursorBrush = SolidColor(Lg.Lock),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSubmit() }),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+fun LgButton(text: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit = {}) {
+    val border = if (!enabled) Lg.Rule2 else if (primary) Lg.Lock else Lg.Rule
+    val fg = if (!enabled) Lg.Ink3 else if (primary) Lg.Lock else Lg.Ink2
     Box(
         Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
             .clip(RoundedCornerShape(3.dp))
             .border(BorderStroke(1.dp, border), RoundedCornerShape(3.dp))
-            .background(if (primary) Lg.LockBg else Color.Transparent)
-            .clickable(onClick = onClick)
+            .background(if (primary && enabled) Lg.LockBg else Color.Transparent)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {

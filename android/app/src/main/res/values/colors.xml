@@ -1,0 +1,5 @@
+<resources>
+    <!-- Kept in sync with ui/theme/Palette.kt (Lg.Paper / Lg.Deep). -->
+    <color name="lg_paper">#101614</color>
+    <color name="lg_deep">#0A0F0E</color>
+</resources>

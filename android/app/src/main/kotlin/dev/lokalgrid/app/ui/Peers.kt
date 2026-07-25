@@ -1,5 +1,7 @@
 package dev.lokalgrid.app.ui
 
+import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.protocol.NodeFrame
 import dev.lokalgrid.protocol.TrackRecord
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -8,13 +10,16 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * DUMMY peers — a Phase-02 preview of "everyone on one map". Real peers arrive
- * over the node's per-client cursors later; for now these are synthetic, placed
- * relative to your live fix so they sit wherever you are. Colours follow the
- * master-plan Map wireframe: you = lock, user a = sig, user b = lora. user b is
- * deliberately stale so the age/uncertainty rendering (§6) is visible.
+ * The other people on this node — real now, from the node's `peer` frames
+ * (they were synthetic through Phase 01). The node is authoritative about who
+ * exists and where they last said they were; this type is only the render shape.
+ *
+ * Every peer carries its uncertainty and its age for the same reason your own
+ * dot does (§6): a position from 18 minutes ago drawn as a crisp dot is a lie
+ * about where someone is now.
  */
 data class Peer(
+    val id: Int,
     val name: String,
     val latDeg: Double,
     val lonDeg: Double,
@@ -22,25 +27,57 @@ data class Peer(
     val ageSec: Long,
     val colorHex: String,
     val kind: PillKind,
+    val ghost: Boolean = false,
 )
 
-fun dummyPeers(self: TrackRecord?): List<Peer> {
-    if (self == null) return emptyList()
-    val t = (self.epoch % 3600).toDouble()
-    // small drift so they look alive, not pinned
-    val ax = 0.00015 * sin(t / 18); val ay = 0.00015 * cos(t / 18)
-    return listOf(
-        Peer("user a", self.latDeg + 0.0008 + ax, self.lonDeg + 0.0009 + ay, 12.0, 130, "#E39A4E", PillKind.NEUTRAL),
-        Peer("user b", self.latDeg - 0.0011, self.lonDeg - 0.0006, 28.0, 1080, "#A99BDB", PillKind.LORA),
-    )
+// Map wireframe colours, assigned round-robin by client id.
+private val PEER_COLORS = listOf(
+    "#E39A4E" to PillKind.NEUTRAL,
+    "#A99BDB" to PillKind.LORA,
+    "#6FB2A6" to PillKind.OK,
+    "#D2725F" to PillKind.WARN,
+)
+
+/** Everyone except you — your own dot is drawn from your live fix. */
+fun peersOf(state: LiveState): List<Peer> {
+    val ghosts = state.roster.filter { it.isGhost }.map { it.id }.toSet()
+    return state.peers
+        .filter { it.id != state.selfId }
+        .sortedBy { it.id }
+        .map { p ->
+            val (color, kind) = PEER_COLORS[p.id.coerceAtLeast(0) % PEER_COLORS.size]
+            Peer(
+                id = p.id,
+                name = p.name,
+                latDeg = p.latE7 / 1e7,
+                lonDeg = p.lonE7 / 1e7,
+                // No HDOP from a peer means unknown, not perfect: draw a wide ring.
+                accuracyM = if (p.hd > 0) accuracyMeters(p.hd) else 40.0,
+                ageSec = p.ageS,
+                colorHex = color,
+                kind = kind,
+                ghost = p.id in ghosts,
+            )
+        }
 }
 
 /** "260 m NE · 2 min" — distance, 8-point compass, and age, for the people rows. */
 fun relative(self: TrackRecord, p: Peer): String {
     val (meters, bearing) = distanceBearing(self.latDeg, self.lonDeg, p.latDeg, p.lonDeg)
     val dist = if (meters < 1000) "${meters.roundToInt()} m" else "%.1f km".format(meters / 1000)
-    val age = if (p.ageSec < 90) "now" else "${(p.ageSec / 60)} min"
+    val age = when {
+        p.ageSec < 90 -> "now"
+        p.ageSec < 3600 -> "${p.ageSec / 60} min"
+        else -> "${p.ageSec / 3600} h"
+    }
     return "$dist $bearing · $age"
+}
+
+/** Age as a severity, so a stale position never reads as a current one. */
+fun Peer.staleness(): PillKind = when {
+    ageSec < 90 -> PillKind.OK
+    ageSec < 900 -> PillKind.NEUTRAL
+    else -> PillKind.WARN
 }
 
 private val COMPASS = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")

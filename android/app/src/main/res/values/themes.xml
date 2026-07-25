@@ -1,4 +1,27 @@
 <resources>
     <!-- Window theme only; the real theming happens in Compose (Material 3). -->
-    <style name="Theme.Lokalgrid" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.Lokalgrid" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/lg_paper</item>
+        <item name="android:statusBarColor">@color/lg_deep</item>
+        <item name="android:navigationBarColor">@color/lg_paper</item>
+    </style>
+
+    <!--
+      Launch theme. Two mechanisms, because the platform changed underneath:
+
+      · Android 12+ draws the *system* splash screen from the windowSplashScreen*
+        attributes below, using the launcher icon. Without them you get the stock
+        robot on a stock background, which is what shipped until now.
+      · Android 11 and below have no splash screen API, so windowBackground is
+        what fills the gap between tap and first frame.
+
+      Both point at the same paper colour and the same mark, so the launch looks
+      like one continuous surface into the app.
+    -->
+    <style name="Theme.Lokalgrid.Splash" parent="Theme.Lokalgrid">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:windowSplashScreenBackground">@color/lg_deep</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_lokalgrid</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/lg_deep</item>
+    </style>
 </resources>

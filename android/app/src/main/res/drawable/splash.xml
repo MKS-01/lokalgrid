@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window background shown between tap and first frame. Same paper colour
+     as the app, so the launch reads as one continuous surface instead of a
+     white flash into a dark UI. No logo image: this is a field instrument. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/lg_deep" />
+    <item
+        android:drawable="@drawable/ic_lokalgrid"
+        android:gravity="center"
+        android:width="120dp"
+        android:height="120dp" />
+</layer-list>

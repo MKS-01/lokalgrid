@@ -1,0 +1,31 @@
+<!-- The mark: a fix and its uncertainty. A solid centre dot (the position) inside
+     an accuracy ring, with a wider, fainter ring beyond it — the §6 rule as a
+     logo, since "never a crisp dot" is the product's whole identity.
+     Drawn on a 108dp adaptive-icon canvas; the art stays inside the 66dp safe
+     circle so no launcher mask can clip it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- outer uncertainty ring, faint -->
+    <path
+        android:strokeColor="#4EC2A6"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.35"
+        android:fillColor="#00000000"
+        android:pathData="M 54,26 A 28,28 0 1,1 53.9,26" />
+
+    <!-- accuracy ring -->
+    <path
+        android:strokeColor="#4EC2A6"
+        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:pathData="M 54,36 A 18,18 0 1,1 53.9,36" />
+
+    <!-- the fix itself -->
+    <path
+        android:fillColor="#4EC2A6"
+        android:pathData="M 54,46 A 8,8 0 1,1 53.9,46 Z" />
+</vector>
