@@ -26,7 +26,11 @@ Encrypted text for whoever is inside the building or within radio range of the n
 - **Each user's durable copy lives on their own phone**, in **Room (SQLite)**; the node keeps only a short backfill ring plus undelivered traffic. Addressed messages supersede the "no DMs" half of the 2026-07-20 chat decision; the shared channel is still exactly one, text only.
 - Say plainly in the UI that metadata (who, when, how long) is visible to the node. No "secure" badge implying more.
 
-The identity features, all Phase 04+: **the airtime economy made visible**, **the encrypted dead-drop**, **the power ladder**. The rule underneath: *the constraint is the interface* — duty cycle, battery, storage and range get rendered, never smoothed over.
+The identity features, all Phase 04+: **the airtime economy made visible**, **the encrypted dead-drop**, **the power ladder**.
+
+**Use the board** (PROJECT.md §1, 2026-07-25): every peripheral has a stated job or is explicitly parked. Headline ones — the **OLED** makes the node usable with zero phones connected (roster, queue, duty, hours left; pages cycled by the button), and the **user button** is a physical hold-2-s emergency that works with no phone attached. IMU = motion gate only (not tamper). microSD = PMTiles storage (**not** the rejected cold archive — different purpose). Magnetometer stays unused.
+
+**Booster role:** a second board relays over **exactly one LoRa hop** — a star of cells around one primary, never a mesh, because one hop means no routing table, no loops, no duplicate suppression. Sub-GHz through concrete is what makes the indoor/per-floor case work. Every relayed message costs airtime on both hops and the UI must show it. The rule underneath: *the constraint is the interface* — duty cycle, battery, storage and range get rendered, never smoothed over.
 
 ## Stack — already decided, do not relitigate
 

@@ -27,7 +27,18 @@ Two collisions with existing decisions, handled rather than papered over. The 20
 
 Also written down, because it is the kind of thing products lie about: the node cannot read bodies but **does** see who talks to whom, when, and how long. Traffic analysis is undefended, and bodies sit decrypted in app-private storage on the phone. A "secure" badge implying otherwise would break the honesty rule harder than any spinner.
 
-**Next:** unchanged in the near term — the phone's own GPS behind "share my position", Room for the track, then two clients with one flooding. Encryption, the device store and the dead-drop are now one phase (04b), all of it after Phase 03; nothing here moves the natural stopping point.
+**Last piece: actually use the board.** Half the peripherals had no job, which is how a plan ends up buying hardware it never touches. Every part now has a stated role or is explicitly parked (§1), and two of them turn into features rather than support:
+
+- **The OLED makes the node usable with zero phones connected** — roster, queue depth, duty used, hours left on the current power rung, pairing code, emergency state, pages cycled by the button. That is the line between a dev board and a device you can put on a table and read. Minimal version lands in Phase 03 while the board is already on the bench (SSID, client count, fix, battery — two hours of work), full pages in 04.
+- **The user button is a physical emergency** — hold two seconds, lane-0 alert with position, working whether or not any phone is attached. A walkie-talkie has a button on the box.
+
+IMU is demoted to what it should always have been (motion gate for logging and beacon interval, *not* tamper — that stays rejected), RTC gets the job of holding time while GNSS sleeps, BME280 drives a pressure trend rather than altitude, and the magnetometer is explicitly left doing nothing. The microSD gets a *different* job from the one that was rejected: PMTiles storage, because 8 MB of internal flash cannot hold a basemap and a card can. Wrote that as a purpose change, not a reversal, so §2's archive rejection still reads as current.
+
+**And the better use of a second board: a range booster.** The physics is the point — sub-GHz LoRa goes through concrete floors that 2.4 GHz WiFi and BLE do not, so indoors it is one node per floor, phones attaching to whichever is nearest, nodes linked over LoRa. Outdoors it is the same trick over a ridge. Topology is **a star of cells around one primary, exactly one hop**: no booster-to-booster path, which means no routing table, no loop detection and no duplicate suppression — the three things that make mesh firmware genuinely hard. The primary keeps the log and the roster, so §3's single-authority rule survives intact.
+
+This supersedes the "exactly two boards, statically paired" line I wrote earlier the same evening: the constraint that matters is the single hop, not the board count. The honest ceiling is airtime, not nodes — every relayed message is paid for twice against a 1 % duty cycle, so two or three boosters at conversational traffic is the practical limit, and the UI has to show which cell a message crossed and what it cost. Otherwise the airtime-economy feature starts lying the moment a relay exists.
+
+**Next:** unchanged in the near term — the phone's own GPS behind "share my position", Room for the track, then two clients with one flooding. Encryption, the device store and the dead-drop are now one phase (04b); the board work is 03 (minimal OLED) and 04 (status pages, button, IMU gate); boosters are 06. Nothing here moves the natural stopping point.
 
 ## 2026-07-25 (later) — cursors, backlog resume, and a Link screen instead of a connect gate
 

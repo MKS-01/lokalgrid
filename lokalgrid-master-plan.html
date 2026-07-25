@@ -372,6 +372,39 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
       </tbody>
     </table></div>
 
+    <h2>What each peripheral is actually for</h2>
+    <p>Most of this board was doing nothing. Every part now has a job or is explicitly parked, so a later session never has to guess whether an idle chip is an oversight or a decision.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Part</th><th>Job</th><th class="m">Phase</th></tr></thead>
+      <tbody>
+        <tr><td><b>OLED 1.3&Prime;</b></td><td><b>The node is usable with zero phones connected.</b> Pages cycled by the user button: roster and client count, queue depth and duty used, battery and hours left on the current rung, last message sender, pairing code, emergency state. This is what makes it a device rather than a headless box.</td><td class="m">03 min, 04 full</td></tr>
+        <tr><td><b>User button</b></td><td><b>Physical emergency.</b> Hold two seconds and a lane-0 alert goes out with position, whether or not any phone is attached. Short press cycles the display; long press enters pairing. A walkie-talkie has a button on the box.</td><td class="m">04 · LoRa half 06</td></tr>
+        <tr><td>AXP2101 + coulomb counter</td><td>The power ladder's numbers — hours left on each rung, and the thresholds that shed services.</td><td class="m">06</td></tr>
+        <tr><td>BME280 <i>(when fitted)</i></td><td>Already in the record as <code>baro</code>/<code>tmp</code> with sentinels. Drives a <b>pressure trend</b> — falling pressure over three hours is worth telling a walking group — not altitude.</td><td class="m">06b</td></tr>
+        <tr><td>PCF8563 RTC</td><td>Holds time across deep sleep with the GNSS powered down, so a node conserving battery still timestamps correctly. Disciplined by GNSS when a fix exists; the fallback for the phone time service.</td><td class="m">06b</td></tr>
+        <tr><td>QMI8658 IMU</td><td>Motion gate for logging and beacon interval — a stationary node beacons less. <b>Not</b> tamper or free-fall detection, which stays rejected.</td><td class="m">04</td></tr>
+        <tr><td>8 MB PSRAM</td><td>Backlog chunk buffers, the position ring, tile serving. The reason a client can catch up without stalling the node.</td><td class="m">in use</td></tr>
+        <tr><td>microSD</td><td><b>Purpose changed:</b> map tiles. 8 MB of internal flash cannot hold a PMTiles basemap; a card can. Still rejected as a <em>cold log archive</em> — that rationale is unchanged. Stays on SPI3, never sharing a bus with the SX1262.</td><td class="m">06b, optional</td></tr>
+        <tr><td>QMC6310 magnetometer</td><td>Nothing. Heading comes from course-over-ground; rejected in section 01 and still rejected.</td><td class="m">&mdash;</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>The board as a range booster</h2>
+    <p>A second board is the cheapest way to double useful coverage &mdash; and it is what makes the <em>building</em> case work at all.</p>
+    <p><b>The physics that matters:</b> sub-GHz LoRa passes through concrete floors and walls that 2.4&nbsp;GHz WiFi and BLE simply do not. So indoors, one node per floor: phones attach over WiFi/BLE to whichever node is nearest, and the nodes link to each other over LoRa. Outdoors it is the same trick across a ridge instead of a slab.</p>
+    <pre>        phones ──WiFi/BLE──┐
+                           ├── BOOSTER (floor 3) ──LoRa──┐
+        phones ──WiFi/BLE──┘                             │
+                                                         ├── PRIMARY ── clients, log, roster
+        phones ──WiFi/BLE──── BOOSTER (basement) ──LoRa──┘</pre>
+    <ul>
+      <li><b>Exactly one hop.</b> A booster talks to the primary and to nobody else. No booster-to-booster path means no routing table, no loop detection, and no duplicate suppression to get wrong &mdash; the three things that make mesh firmware hard.</li>
+      <li><b>The primary owns the log and the roster.</b> Boosters are relays with their own local clients, forwarding a summary upward. One authority, exactly as section 04 requires.</li>
+      <li><b>Airtime is the ceiling, not the node count.</b> Every relayed message is paid for twice, once per hop, against a 1&nbsp;% duty cycle &mdash; so two or three boosters at conversational traffic is the honest limit. The UI has to show which cell a message crossed and what it cost, or the airtime-economy feature quietly starts lying.</li>
+      <li>A booster with no clients still logs GNSS and beacons, so it doubles as a coverage marker.</li>
+    </ul>
+    <div class="note"><b>Supersedes the same day.</b> An earlier note in this plan said &ldquo;exactly two boards, statically paired&rdquo;. The constraint that actually matters is the <em>single hop</em>, not the board count &mdash; a star of cells around one primary keeps the routing trivial and the airtime arithmetic explainable.</div>
+
     <h3>Additions beyond the stock board</h3>
     <div class="tw"><table>
       <thead><tr><th>Part</th><th class="m">Approx</th><th>Why it earns its place</th></tr></thead>
@@ -1075,7 +1108,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
 
     <div class="phase"><div class="n">03</div><div>
       <h4>Hardware: real node, BLE for real</h4>
-      <p>Now the board comes out. ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, LittleFS mounted, SoftAP with a fixed SSID plus BLE advertising — the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: <b>point the app's WebSocket at the real SoftAP</b>, and <b>build the BLE GATT path against the real board</b> (BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes — three phones on a shared map, the local island. This is a <b>complete project</b>; stopping here is success.</p>
+      <p>Now the board comes out, and something appears on its own screen. ESP-IDF toolchain up, USB-JTAG debugger working with a real breakpoint, LittleFS mounted, SoftAP with a fixed SSID plus BLE advertising — the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: <b>point the app's WebSocket at the real SoftAP</b>, and <b>build the BLE GATT path against the real board</b> (BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes — three phones on a shared map, the local island. This is a <b>complete project</b>; stopping here is success.</p>
       <em>two weekends · <b>natural stopping point</b></em>
     </div></div>
 
@@ -1102,7 +1135,7 @@ tracker bench --duration 60s                 <i># throughput and scheduler stats
     <div class="phase"><div class="n">06</div><div>
       <h4>Optional: the link out</h4>
       <p>LoRa underneath the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only worth doing if you have somewhere to take it where WiFi range genuinely runs out.</p>
-      <p>Two extensions belong here, both of which need the radio to exist first. <b>The power ladder</b>: serve everything &rarr; BLE only &rarr; beacon only &rarr; sleep, each step at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long each rung lasts. Beacon-only matters most — a node with a nearly flat cell should still say where it is, because that is when someone is looking for it. And <b>the two-node link</b>: a second board, statically paired, exchanging positions and short messages across the LoRa hop so the group spans a ridge. Exactly two, never a mesh — the airtime arithmetic stays honest with one hop and stops being explainable past it.</p>
+      <p>Two extensions belong here, both of which need the radio to exist first. <b>The power ladder</b>: serve everything &rarr; BLE only &rarr; beacon only &rarr; sleep, each step at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long each rung lasts. Beacon-only matters most — a node with a nearly flat cell should still say where it is, because that is when someone is looking for it. And <b>the booster role</b> (section 02): a second board relaying across one LoRa hop, so coverage spans a ridge outdoors or a concrete floor indoors — sub-GHz goes through slabs that 2.4 GHz does not. A star of cells around one primary, never a mesh, and every relayed message is paid for on both hops, which the UI has to show.</p>
       <em>open-ended · optional by design</em>
     </div></div>
 

@@ -52,6 +52,45 @@ Why it matters:
 
 Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in firmware, not as a config setting.
 
+### What each peripheral is actually for *(2026-07-25)*
+
+Most of the board was doing nothing. Every part now has a job or is explicitly parked, so a future session doesn't have to guess whether an idle chip is an oversight or a decision.
+
+| Part | Job | Phase |
+|---|---|---|
+| **OLED 1.3"** | **The node is usable with zero phones connected.** Pages cycled by the user button: roster + client count, queue depth and duty used, battery and hours left per power rung, last message sender, pairing code, emergency state. This is what makes it a *device* rather than a headless box. | 03 minimal, 04 full |
+| **User button** | **Physical emergency.** Hold 2 s → lane-0 beacon with position, regardless of whether any phone is attached. Short press cycles OLED pages; long press enters pairing. A walkie-talkie has a button on the box. | 04, LoRa half in 06 |
+| **AXP2101 + coulomb counter** | The power ladder's numbers: hours remaining per rung, and the thresholds that shed services. | 06 |
+| **BME280** *(when fitted)* | Already in the record as `baro`/`tmp` with sentinels. Used for a **pressure trend** — falling pressure over 3 h is worth telling a walking group about — not for altitude. | 06b |
+| **PCF8563 RTC** | Holds time across deep sleep with GNSS powered down, so timestamps stay valid on a node that is conserving battery. Disciplined by GNSS when a fix is available; the fallback source for the phone time service. | 06b |
+| **QMI8658 IMU** | Motion gate for logging and beacon interval — a stationary node beacons less. **Not** tamper/free-fall detection, which stays rejected. | 04 |
+| **8 MB PSRAM** | Backlog chunk buffers, the position ring, and tile serving. The reason a client can catch up without the node stalling. | in use |
+| **microSD** | **Purpose changed:** map tiles. 8 MB of internal flash cannot hold a PMTiles basemap; an SD card can. Still rejected as a *cold log archive* — see §2, that rationale is unchanged. Stays on SPI3, never shares a bus with the SX1262. | 06b, optional |
+| **QMC6310 magnetometer** | Nothing. Heading comes from course-over-ground; rejected in §2 and still rejected. | — |
+
+### The board as a range booster *(2026-07-25)*
+
+A second board is the cheapest way to double useful coverage, and it is what makes the *building* case work at all.
+
+**The physics that matters:** sub-GHz LoRa goes through concrete floors and walls that 2.4 GHz WiFi and BLE simply do not. So indoors, one node per floor — phones attach over WiFi/BLE to whichever node is nearest, and the nodes link to each other over LoRa. Outdoors it is the same trick over a ridge instead of a slab.
+
+**Topology: a star of cells, never a mesh.**
+
+```
+        phones ──WiFi/BLE──┐
+                           ├── BOOSTER (floor 3) ──LoRa──┐
+        phones ──WiFi/BLE──┘                             │
+                                                         ├── PRIMARY ── clients, log, roster
+        phones ──WiFi/BLE──── BOOSTER (basement) ──LoRa──┘
+```
+
+- Exactly **one hop**. A booster talks to the primary and to nobody else — no booster-to-booster path, so there is no routing table, no loop detection, and no duplicate suppression to get wrong.
+- The **primary owns the log and the roster**; boosters are relays with their own local clients, and forward a summary upward. One authority, as §3 requires.
+- **Airtime is the real ceiling, not the node count.** Every relayed message is paid for twice — once on each hop — against a 1 % duty cycle, so 2–3 boosters at conversational traffic is the honest practical limit. The UI must show which cell a message crossed and what that cost, or the whole airtime-economy feature quietly starts lying.
+- A booster with no clients still logs GNSS and beacons, so it doubles as a coverage marker.
+
+*(This supersedes the earlier "exactly two boards, statically paired" note from the same day: the constraint that matters is the single hop, not the board count.)*
+
 ### Additions needed
 
 | Part | ~Cost | Note |
@@ -105,7 +144,7 @@ Either way: design to a **1% hourly duty cycle**, enforced as a hard limit in fi
 | Solar charging | Adds a variable while fixed things are still being debugged. |
 | OTA update | Nobody depends on this device. Flash over USB. |
 | IP65 enclosure / field hardening | Product work, not learning work. |
-| microSD cold archive | Internal LittleFS holds ~a week. Deferred, not needed. |
+| microSD cold archive | Internal LittleFS holds ~a week. Deferred, not needed. *(Still rejected as an archive. The card gets a different job in §1 — holding PMTiles, which internal flash cannot fit. Different purpose, not a reversal.)* |
 | Magnetometer heading | Course-over-ground from GNSS is sufficient. |
 | PostGIS / cloud backend / fleet mode | No server. The node is the authority. |
 | Copying Meshtastic firmware code | GPL. Reading for architecture ideas is fine; copying binds the licence. Writing from the protocol spec is cleaner and more instructive. |
@@ -480,12 +519,15 @@ Per-client cursors, message history, chat (one channel, text only), everyone see
 
 ### Phase 03 — Hardware: real node, BLE for real · *two weekends*
 Now the board comes out. ESP-IDF toolchain up, **USB-JTAG debugger working with a real breakpoint**, LittleFS mounted, SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: **point the app's WebSocket at the real SoftAP**, and **build the BLE GATT path against the real board** (§6: BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes.
+One cheap addition while the board is on the bench: **the OLED shows something real** — SSID, client count, fix state, battery. Two hours of work, and it is the difference between a dev board with a blinking LED and a device you can put on a table and read.
 **⚑ NATURAL STOPPING POINT.** Three phones on a shared map, served by the real T-Beam. This is a complete project. Stopping here is success.
 
 ### Phase 04 — Make it fight, and show the price · *two weekends*
 Deficit round-robin, priority lanes, admission control, backlog interleaving — hardened against **real** airtime timing (the mock could exercise the logic; only hardware exercises the clock). Test by writing a client that deliberately floods. Most transferable engineering in the project.
 
 Same phase, same data, one more step: the **airtime economy as a feature** — cost in ms shown *before* sending, per-client share of the hour, a queue you can cancel or promote to lane 0 (and see what that costs), and a name rather than a spinner when you are behind.
+
+The board earns its keep here too (§1): **OLED status pages** cycled by the user button — roster, queue depth, duty used, hours left — and the **physical emergency button**, hold 2 s for a lane-0 alert with position, working whether or not any phone is attached. The IMU becomes the motion gate for logging and beacon interval.
 
 ### Phase 04b — Encryption, the device store, and the dead-drop · *two weekends*
 Three things that only make sense together, and the phase where the walkie-talkie framing (§2, 2026-07-25) becomes real:
@@ -502,7 +544,7 @@ By now the codec, hand-written twice (C on the node, Kotlin in the app), has bit
 ### Phase 06 — Optional: the link out
 LoRa under the scheduler, position aggregation, duty-cycle ceiling, BLE presence layer. Only if there is somewhere to take it where WiFi range genuinely runs out.
 
-Two extensions belong here because both need the radio first. **The power ladder**: serve everything → BLE only → beacon only → sleep, each rung at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long it lasts — beacon-only matters most, since a nearly flat node should still say where it is. **The two-node link**: a second board, statically paired, exchanging positions and short messages across one LoRa hop so the group spans a ridge. Exactly two, never a mesh — the airtime arithmetic stops being explainable past one hop.
+Two extensions belong here because both need the radio first. **The power ladder**: serve everything → BLE only → beacon only → sleep, each rung at a stated battery threshold, announced with its reason and a coulomb-counter estimate of how long it lasts — beacon-only matters most, since a nearly flat node should still say where it is. **The booster role** (§1): a second board relaying over one LoRa hop, so coverage spans a ridge outdoors or a concrete floor indoors — sub-GHz goes through slabs that 2.4 GHz does not. A star of cells around one primary, never a mesh; the airtime cost of each relayed message is paid twice and must be shown.
 
 ### Phase 06b — Optional: time and the map, from the node
 Two services that fall out of hardware already on the board. **Time**: the GNSS 1PPS pin makes the node a trustworthy clock with no internet and no cell, so phones take time from it — which is what makes timestamps comparable across the group and lets records logged without a fix have their timeline repaired. **The map**: PMTiles served from the node over the SoftAP, so a phone that has never been to this valley still gets a basemap from the thing on the table.
