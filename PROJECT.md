@@ -3,7 +3,7 @@
 > **Project name: Lokalgrid** *(2026-07-20)* — *lokal* (German: local) + grid: your own tiny infrastructure grid in the field, no carrier, no internet. Verified unique on GitHub at naming time (0 repos). Repo/dir name: `lokalgrid`.
 
 > Context file for resuming this project from a CLI agent session.
-> Drop this at the repo root. Companion doc: `lokalgrid-master-plan.html` (same content, rendered, with wireframes and diagrams, plus the §14 concept-rethink record).
+> Drop this at the repo root. Companion doc: `lokalgrid-master-plan.html` — the **reference spec** (hardware · app · protocol · state). That file carries no rationale and no history; this one carries no step-by-step detail. When a decision here changes something the spec asserts, update both.
 
 ---
 
@@ -448,7 +448,7 @@ Google's agentic Android tools (`developer.android.com/tools/agents`) are the te
 
 Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
-> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §07, alongside the original wireframes and a table of where the build diverged from them. Captured 2026-07-25, Phase 02 against the mock.
+> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §03. Captured 2026-07-25, Phase 02 against the mock.
 
 ### Local store and crypto *(2026-07-25)*
 

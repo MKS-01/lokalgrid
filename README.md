@@ -43,7 +43,7 @@ first-run flow (permissions · battery · node URL).
 | **Live** — fix, uncertainty, people, cursor | **Map** — everyone, each with its ring and age | **Chat** — delivered *and* the link-out queue reason | **Link** — permissions · wifi · ble · session |
 
 All twelve screens, and what changed between wireframe and build, are in
-[§07 of the master plan](lokalgrid-master-plan.html) · raw files in
+[§03 of the spec](lokalgrid-master-plan.html) · raw files in
 [`docs/screens/`](docs/screens).
 
 ## Run it
@@ -69,7 +69,7 @@ cd android  && ./gradlew :protocol:test   # the Kotlin half of the same codec
 | Path | What |
 |---|---|
 | `PROJECT.md` | **The decision record.** Binding constraints, rejected ideas and why, the wire format, the roadmap. Read this first. |
-| `lokalgrid-master-plan.html` | The same content rendered, with wireframes and the concept-rethink record. |
+| `lokalgrid-master-plan.html` | **The reference spec** — hardware, app, and the protocol where they meet, plus what runs today. Current material only; start a coding session here. |
 | `BUILDLOG.md` | Dated entry per session: what was tried, what surprised, what's next. Hobby projects die from lost context, not difficulty. |
 | `mock-node/` | The fake node (Node.js). Serves the real protocol from a synthetic or replayed session. The highest-leverage code in the project. |
 | `android/` | The client. `:protocol` is plain-Kotlin (codec + control frames, JVM-testable); `:app` is Compose + MapLibre. |

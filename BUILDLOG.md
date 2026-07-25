@@ -1,5 +1,24 @@
 # Build log
 
+## 2026-07-25 (late) — the plan rebuilt as a spec
+
+**Tried:** rewrote `lokalgrid-master-plan.html` from scratch. It had grown to 1261 lines across fourteen sections, and most of what it contained was *story* — why the project exists, the three pivots it went through, what it might have been instead, adjacent projects for when it stops being fun. Good writing, wrong file: none of it helps someone opening a terminal to write code, and half of it described a product that no longer exists.
+
+**New shape: three sections that matter, plus state.**
+
+- **02 Hardware** — the board, what every peripheral is *for*, buses and the SPI rule, power draw and the power ladder, the FreeRTOS task table with the single-owner rule, partitions, the sdkconfig lines that matter, the booster topology.
+- **03 App** — stack, the twelve real screenshots with a table of what each surface shows and what you can do on it, the Room schema, the Android behaviours to design around, the UI rules.
+- **04 Protocol** — where the two meet: the ownership rule, a full session traced frame by frame from `hello` to live records, the 32-byte record with its byte map, both control-frame tables, the airtime lanes, pairing and encryption, BLE chunk framing, and the degradation table.
+- **05 State** — what runs today with test counts, what is next in order, the open band question, and where the other documents live.
+
+Dropped entirely: the concept essay, logger-vs-tracker, the rethink record, the adjacent-projects list, the roadmap-as-narrative, the testing-strategy prose, and the hand-drawn wireframes — the real screenshots supersede those, and keeping both invited the question of which was current. Carried over byte-for-byte: the stylesheet, the block diagram, the record byte map, the screenshot gallery. Then removed 32 CSS rules whose markup no longer existed, and checked every remaining class still resolves. 1261 → 653 lines.
+
+**The document roles are now distinct rather than duplicated**, which is the real fix. `PROJECT.md` holds *why* — decisions, rejections, supersessions. The HTML holds *what* — current, decided, no rationale, no history. `BUILDLOG.md` holds *when*. The old instruction was "these two files are the same content, change both", which is exactly how they drifted: mirroring is a discipline nobody keeps, so the tamper switch survived three pivots in one file after being rejected in the other. Recorded the new split in CLAUDE.md.
+
+**Surprised:** how much of the old document was *me*, not the project — narrative justifying the build to an imagined reader. Stripping it made the remaining material read as instructions, and made two genuine gaps obvious: nothing had ever specified what happens on connect as a sequence, and the control frames existed only in a mock-node README. Both are in the spec now, which is the thing the next coding session actually opens.
+
+**Next:** unchanged — phone GPS behind "share my position", Room for the track, two clients with one flooding, then Phase 03.
+
 ## 2026-07-25 (evening) — what makes this one different, and a doc that stopped contradicting itself
 
 **Tried:** no code. Surveyed how the phone-only side of this space has moved on, and used it to answer a question the plan had been dodging: *if group messaging needs no hardware at all, why does this project buy a board?*
