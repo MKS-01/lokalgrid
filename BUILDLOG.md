@@ -1,5 +1,18 @@
 # Build log
 
+## 2026-07-25 (late, cont.) — licensed, and two things a public repo should not carry
+
+**Tried:** made the repo properly open source and stripped what was left of the wish-listing.
+
+**MIT, in `LICENSE`.** Chosen over GPL deliberately: this firmware is written from the protocol spec precisely *because* Meshtastic's source is GPL and copying it would bind the licence — so shipping the result under a permissive one keeps that choice meaningful. Recorded in the README alongside the reminder about reading-versus-copying GPL code.
+
+**Two things removed that a public repo should not have carried:**
+
+1. **The mock node's default start position was a named school in my own town**, sitting in `server.js` as a comment and a coordinate pair. That is a personal-location leak in a repo that is already public, and it had been there since Phase 00 without anyone noticing — including me, twice, while writing about honesty. Now Greenwich: neutral, on land, and conventionally the "no opinion" coordinate. `LAT0`/`LON0` still override it. Golden vectors unaffected, since fixtures use explicit values rather than the defaults — verified by regenerating and getting a clean diff.
+2. **The "adjacent projects deliberately parked" list** — six other things the board could become. That is a wish list, not a decision, and it had no business in a decision record. Reduced to one sentence saying building something else instead is a legitimate outcome and is not tracked here. The "keeping it alive" pep talk went too: advice about how to work belongs in the build log, not in the constraints file.
+
+**Also:** the screenshots were rendering as 190 px thumbnails — too small to read what the tabs actually say, which defeats the point of having them. Widened the grid and made each one a link to the full-resolution file.
+
 ## 2026-07-25 (late) — the plan rebuilt as a spec
 
 **Tried:** rewrote `lokalgrid-master-plan.html` from scratch. It had grown to 1261 lines across fourteen sections, and most of what it contained was *story* — why the project exists, the three pivots it went through, what it might have been instead, adjacent projects for when it stops being fun. Good writing, wrong file: none of it helps someone opening a terminal to write code, and half of it described a product that no longer exists.

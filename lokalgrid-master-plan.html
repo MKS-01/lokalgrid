@@ -121,10 +121,12 @@ pre u{color:#E5A85C;text-decoration:none}
 .pill.l{background:var(--lora-bg);color:var(--lora)}
   background-image:linear-gradient(var(--rule-2) 1px,transparent 1px),linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);background-size:16px 16px}
 
-.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px;margin:14px 0 22px}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:22px 20px;margin:16px 0 24px}
 .shot figure{margin:0}
-.shot img{width:100%;border:1px solid var(--rule);border-radius:4px;display:block;background:var(--deep)}
-.shot figcaption{font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--ink-3);margin-top:7px}
+.shot a{display:block;border:1px solid var(--rule);border-radius:4px;overflow:hidden;background:var(--deep)}
+.shot a:hover{border-color:var(--lock)}
+.shot img{width:100%;display:block}
+.shot figcaption{font-family:var(--mono);font-size:10.5px;line-height:1.65;color:var(--ink-3);margin-top:8px}
 .shot figcaption b{color:var(--ink-2);font-weight:600;display:block;margin-bottom:2px}
 
 
@@ -391,18 +393,18 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y</pre>
     <h2>Screens</h2>
     <p class="caption">Captured from the running app against the mock node. Five flat tabs; Link opens from the status bar and Diagnostics from a long-press on the title — neither is a sixth tab.</p>
 <div class="shots">
-      <div class="shot"><figure><img src="docs/screens/01-boot.png" alt="Boot screen naming the node"><figcaption><b>boot</b>Holds until the first connection attempt resolves (1200 ms cap), naming the node it is opening. Not a timed logo.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/02-live.png" alt="Live tab"><figcaption><b>live</b>The fix with its HDOP accuracy, people on the node, node stats, cursor/history, and the three actions.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/03-map.png" alt="Map tab"><figcaption><b>map</b>Your dot inside its accuracy ring, peers with age and staleness colour, the resumed track as a line.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/04-chat.png" alt="Chat tab"><figcaption><b>chat</b>Two truths per message: <em>relayed</em> / <em>seq 2</em> for what the node has, and the link-out queue reason underneath &mdash; &ldquo;queued 60 s &mdash; radio duty-cycled&rdquo;.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/05-clients.png" alt="Clients tab"><figcaption><b>clients</b>Roster and per-client airtime, node-computed. Ghosts labelled. Duty cycle used: 0.78% of the 1.0% ceiling.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/06-config.png" alt="Config tab"><figcaption><b>config</b>This phone&rsquo;s setup above, the node&rsquo;s config below. Edits stage locally and write explicitly; locked keys carry the reason they are not settings.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/07-link.png" alt="Link screen"><figcaption><b>link</b>Not in the original wireframes. Tap the status bar: permissions &middot; wifi &middot; ble &middot; session, as an ordered flow. Never a gate &mdash; the tab bar stays live.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/08-diagnostics.png" alt="Diagnostics overlay"><figcaption><b>diagnostics</b>Long-press the app bar title, as specified. Cursor, backlog, dropped frames, flags.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/09-setup-1.png" alt="Setup step 1"><figcaption><b>setup 1/4</b>What this is. First run only, re-enterable from Config.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/10-setup-2.png" alt="Setup step 2, permissions"><figcaption><b>setup 2/4</b>Bluetooth and notifications, each with its reason &mdash; plus an explicit <em>not asked for: location &mdash; never</em>.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/11-setup-3.png" alt="Setup step 3, battery"><figcaption><b>setup 3/4</b>The One UI deep-sleep trap. Detects the exemption, opens the right settings screen, and admits the app can only notice it.</figcaption></figure></div>
-      <div class="shot"><figure><img src="docs/screens/12-setup-4.png" alt="Setup step 4, node URL"><figcaption><b>setup 4/4</b>Which node to talk to, persisted. Retires the 10.0.2.2-on-a-real-phone dead end.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/01-boot.png" target="_blank" rel="noopener"><img src="docs/screens/01-boot.png" alt="Boot screen naming the node"></a><figcaption><b>boot</b>Holds until the first connection attempt resolves (1200 ms cap), naming the node it is opening. Not a timed logo.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/02-live.png" target="_blank" rel="noopener"><img src="docs/screens/02-live.png" alt="Live tab"></a><figcaption><b>live</b>The fix with its HDOP accuracy, people on the node, node stats, cursor/history, and the three actions.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/03-map.png" target="_blank" rel="noopener"><img src="docs/screens/03-map.png" alt="Map tab"></a><figcaption><b>map</b>Your dot inside its accuracy ring, peers with age and staleness colour, the resumed track as a line.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/04-chat.png" target="_blank" rel="noopener"><img src="docs/screens/04-chat.png" alt="Chat tab"></a><figcaption><b>chat</b>Two truths per message: <em>relayed</em> / <em>seq 2</em> for what the node has, and the link-out queue reason underneath &mdash; &ldquo;queued 60 s &mdash; radio duty-cycled&rdquo;.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/05-clients.png" target="_blank" rel="noopener"><img src="docs/screens/05-clients.png" alt="Clients tab"></a><figcaption><b>clients</b>Roster and per-client airtime, node-computed. Ghosts labelled. Duty cycle used: 0.78% of the 1.0% ceiling.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/06-config.png" target="_blank" rel="noopener"><img src="docs/screens/06-config.png" alt="Config tab"></a><figcaption><b>config</b>This phone&rsquo;s setup above, the node&rsquo;s config below. Edits stage locally and write explicitly; locked keys carry the reason they are not settings.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/07-link.png" target="_blank" rel="noopener"><img src="docs/screens/07-link.png" alt="Link screen"></a><figcaption><b>link</b>Not in the original wireframes. Tap the status bar: permissions &middot; wifi &middot; ble &middot; session, as an ordered flow. Never a gate &mdash; the tab bar stays live.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/08-diagnostics.png" target="_blank" rel="noopener"><img src="docs/screens/08-diagnostics.png" alt="Diagnostics overlay"></a><figcaption><b>diagnostics</b>Long-press the app bar title, as specified. Cursor, backlog, dropped frames, flags.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/09-setup-1.png" target="_blank" rel="noopener"><img src="docs/screens/09-setup-1.png" alt="Setup step 1"></a><figcaption><b>setup 1/4</b>What this is. First run only, re-enterable from Config.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/10-setup-2.png" target="_blank" rel="noopener"><img src="docs/screens/10-setup-2.png" alt="Setup step 2, permissions"></a><figcaption><b>setup 2/4</b>Bluetooth and notifications, each with its reason &mdash; plus an explicit <em>not asked for: location &mdash; never</em>.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/11-setup-3.png" target="_blank" rel="noopener"><img src="docs/screens/11-setup-3.png" alt="Setup step 3, battery"></a><figcaption><b>setup 3/4</b>The One UI deep-sleep trap. Detects the exemption, opens the right settings screen, and admits the app can only notice it.</figcaption></figure></div>
+      <div class="shot"><figure><a href="docs/screens/12-setup-4.png" target="_blank" rel="noopener"><img src="docs/screens/12-setup-4.png" alt="Setup step 4, node URL"></a><figcaption><b>setup 4/4</b>Which node to talk to, persisted. Retires the 10.0.2.2-on-a-real-phone dead end.</figcaption></figure></div>
     </div>
 
     <div class="tw"><table>
@@ -645,7 +647,7 @@ crc16 CCITT over seq + len + payload</pre>
 </section>
 
 <footer>
-  Lokalgrid · reference spec · rebuilt 2026-07-25 · decisions in PROJECT.md · history in BUILDLOG.md
+  Lokalgrid · reference spec · rebuilt 2026-07-25 · decisions in PROJECT.md · history in BUILDLOG.md · MIT licensed
 </footer>
 
 </div>

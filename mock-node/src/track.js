@@ -29,7 +29,7 @@ export class TrackGenerator {
    * @param {number} o.seed   PRNG seed → reproducible track
    * @param {number} o.deviceId u16 node id (metadata, not in the record)
    */
-  constructor({ lat0 = 22.1018771, lon0 = 82.191203, epoch0, seed = 1, deviceId = 41000 } = {}) {
+  constructor({ lat0 = 51.4779, lon0 = -0.0015, epoch0, seed = 1, deviceId = 41000 } = {}) {
     this.lat = lat0;
     this.lon = lon0;
     this.epoch = epoch0 ?? Math.floor(Date.now() / 1000);
@@ -79,7 +79,7 @@ export class TrackGenerator {
       epoch: this.epoch + this.t,
       lat_e7: Math.round(this.lat * E7),
       lon_e7: Math.round(this.lon * E7),
-      alt: is2d ? 0 : Math.round(265 + 5 * Math.sin(this.t / 30)), // ~Bilaspur altitude
+      alt: is2d ? 0 : Math.round(265 + 5 * Math.sin(this.t / 30)), // gentle altitude wander
       baro: BARO_ABSENT, // pretend this unit has no BME280 — sentinel path
       spd: Math.round(this.speedMs * 100), // cm/s
       hdg: Math.round(this.headingDeg * 100), // centidegrees

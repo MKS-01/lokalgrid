@@ -41,8 +41,10 @@ import { PositionLog, Cursors } from './history.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HZ = Number(process.env.HZ ?? 1);
-const LAT0 = Number(process.env.LAT0 ?? 22.1018771); // Brilliant Public School, Bahatarai, Bilaspur
-const LON0 = Number(process.env.LON0 ?? 82.191203);
+// Greenwich: a neutral default that is at least on land. Set LAT0/LON0 to
+// somewhere you know if you want the map to look familiar.
+const LAT0 = Number(process.env.LAT0 ?? 51.4779);
+const LON0 = Number(process.env.LON0 ?? -0.0015);
 const DEVICE_ID = Number(process.env.DEVICE_ID ?? 41000);
 const CAP = Number(process.env.CAP ?? 9); // NimBLE ceiling (§3)
 

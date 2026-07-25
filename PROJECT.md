@@ -560,16 +560,6 @@ node replay dump.bin --speed 60x     # impersonate a node
 node bench --duration 60s
 ```
 
-### Keeping it alive
-
-Hobby projects die from **lost context**, not difficulty.
-
-- Dated build log in the repo. One entry per session: what you tried, what surprised you, what's next.
-- Commit the broken state. `wip-scheduler-confused` + a log note beats a clean repo you cannot re-enter.
-- Stop at a milestone, not mid-refactor. Tests green is a gift to you-in-a-month.
-
----
-
 ## 8. Traps
 
 | Trap | Symptom | Mitigation |
@@ -608,15 +598,6 @@ The firmware skeleton already exists under `firmware/` (CMake shell, partitions.
 
 **Then:** Phases 04+ on real hardware, and keep the build log going throughout.
 
-### Adjacent projects deliberately parked
+### If this stops being fun
 
-Not a backlog — genuinely optional alternatives if this stops being fun. The hardware supports all of them with no additions:
-
-- **TinyGS satellite ground station** — receive LoRa cubesat telemetry. RX-only, no licence, board is supported. Especially good if the band turns out to be 433, since most LoRa satellites are there.
-- **Stratum-1 NTP server** from the GNSS 1PPS pin. Hard timing problem, genuinely useful afterwards.
-- **Vibration analyser** — IMU at a few hundred Hz + FFT + trend to SD. Predictive maintenance on a ceiling fan or pump.
-- **GNSS interferometric reflectometry** — SNR oscillation from `GSV` sentences gives water level / soil moisture.
-- **WiFi CSI presence sensing** — the ESP32 exposes channel state information; detect motion through walls using only the onboard radio.
-- **433 MHz OOK decoder** — rtl_433-style, decode *your own* doorbell/weather station/TPMS.
-
-> If one of these sounds better than the LoRa layer on a given Saturday, build it. The hardware does not care and neither does anyone else. The only real failure mode is grinding through a phase you stopped enjoying because a plan said so.
+The board supports plenty of unrelated projects (satellite RX, a stratum-1 NTP server, vibration analysis, WiFi CSI sensing). Building one of those instead is a legitimate outcome, not an abandonment — but they are not a backlog and are not tracked here.

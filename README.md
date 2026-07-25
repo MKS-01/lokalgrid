@@ -100,6 +100,20 @@ IMU, 1.3" OLED). Two rules that matter before anything else:
   an antenna; a mismatched whip degrades the PA over weeks and reads exactly like
   a firmware bug. Does not block Phases 00–03, which use no LoRa.
 
+## Licence
+
+**MIT** — see [`LICENSE`](LICENSE). Use it, fork it, build one for yourself.
+
+Two notes on other people's code, since this touches a licence-sensitive corner:
+
+- Meshtastic firmware is **GPL**. Reading it for architecture is fine; copying it
+  is not, and this firmware is written from the protocol spec instead.
+- The mock node ships a neutral default start position (Greenwich). Set `LAT0`
+  and `LON0` to somewhere you know — a repo should not carry your home town.
+
+Issues and pull requests are welcome, but this is a personal hobby build with no
+roadmap promises and no support commitment.
+
 ## Conventions
 
 - Client identities are **NATO callsigns** (`alpha`, `bravo`, `charlie`, …), never
