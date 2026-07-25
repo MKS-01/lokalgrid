@@ -13,7 +13,7 @@ This is a **decision record**, not a tutorial. It exists so that a fresh session
 
 If you are an agent reading this: sections 1–6 are binding constraints. Section 2 lists things that were **explicitly rejected** — do not re-propose them without reading the rationale. Section 9 is where work resumes.
 
-**Project status:** planning complete, no code written yet. Next action is Phase 00 — the mock node (section 7), built mock-first so the app comes up before the hardware does.
+**Project status:** Phase 00 done (mock node + golden vectors), Phase 01 code on disk (app decodes the stream, map screen built), Phase 02 started — chat and the forward flow are wired end to end against the mock. Still no hardware; the T-Beam stays boxed until Phase 03.
 
 ---
 
@@ -157,7 +157,7 @@ One radio, up to nine clients. This is what does not exist in Meshtastic's 1:1 m
 
 **Per-client budget:** each client gets 1/N of airtime remaining after lanes 0 and 1. Unused allocation **decays rather than banks** — an absent client must not hoard then flood.
 
-**Admission control:** reject at enqueue with a renderable reason. Never silently drop. UI shows "queued, 40 s — ravi ahead of you".
+**Admission control:** reject at enqueue with a renderable reason. Never silently drop. UI shows "queued, 40 s — bravo ahead of you".
 
 **Client state:**
 ```c
@@ -388,7 +388,7 @@ Practical notes: parts of the suite were still rolling out at adoption time (the
 
 - Five tabs, flat: **Live · Map · Chat · Clients · Config**. Diagnostics via long-press on the title, not a sixth tab.
 - **Every position carries its uncertainty.** Error ellipse from HDOP. Interpolated segments dashed. Stale positions labelled with age. Never a crisp dot implying precision the GNSS did not deliver.
-- Queue state visible: "queued 40 s, ravi ahead of you" — not a spinner.
+- Queue state visible: "queued 40 s, bravo ahead of you" — not a spinner.
 - Failure states name the failure and offer the next action.
 - Config staged locally, written explicitly. Never silently reconfigure mid-edit.
 
@@ -488,7 +488,9 @@ Hobby projects die from **lost context**, not difficulty.
 
 **Immediate blocker:** confirm the LoRa band from the silkscreen (section 1). Does not block Phases 00–03, which use no LoRa at all.
 
-**Next action:** Phase 00 — the mock node. No hardware, no ESP-IDF yet. Build ~200 lines (Node.js or Ktor) that serve the same WebSocket protocol from a synthetic session, with a replay mode, plus the codec golden vectors. Then Phase 01 gets the dot on a MapLibre map against that mock. The T-Beam stays in its box until Phase 03.
+**Next action:** finish Phase 02 against the mock. Phase 00 is done (mock node, `proto 2`, golden vectors); Phase 01's app decodes the live stream; the **forward flow** landed 2026-07-25 on all five tabs and was driven on an emulator — chat (send + emergency lane 0), position sharing with distance decimation, roster rename, staged-then-explicit config writes, node-computed airtime stats. The **first-run flow** landed the same day: launch theme + boot screen, then four setup steps (intro · BLE permissions with an explicit "location: never" row · One UI battery exemption · node URL, persisted and editable), re-enterable from Config. BLE permissions are declared per §5; no GATT connection is opened anywhere — that stays Phase 03. What is left in Phase 02: per-client *position* cursors and backlog resume, the phone's own GPS behind "share my position", then two clients side by side with one deliberately flooding. The T-Beam stays in its box until Phase 03.
+
+**Naming rule (2026-07-25):** clients are **callsigns** (`alpha`, `bravo`, `charlie`, … — NATO alphabet), never personal names, anywhere in code, tests, docs or wireframes.
 
 The firmware skeleton already exists under `firmware/` (CMake shell, partitions.csv, sdkconfig.defaults, LittleFS mount in `app_main`) and is parked until Phase 03. When hardware time comes, that phase's steps are:
 

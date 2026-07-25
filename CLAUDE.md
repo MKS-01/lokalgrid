@@ -12,7 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is built against a mock node before the hardware comes out. Next action is **Phase 00** — the mock node (~200 lines serving the WebSocket protocol from a synthetic/replay session, plus codec golden vectors), then Phase 01 gets the dot on a MapLibre map against it. No hardware until **Phase 03**, where the toolchain, USB-JTAG breakpoint, SoftAP + BLE advertising, and the un-mockable BLE GATT path all land. The firmware skeleton under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`) is parked until then; ESP-IDF not yet installed on this machine. Repo: github.com/MKS-01/lokalgrid.
+The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is built against a mock node before the hardware comes out. **Phase 00 is done** (`mock-node/`, `proto 2`, golden vectors) and Phase 01's app decodes the live stream. **Phase 02 is in progress:** the forward flow is wired on **all five tabs** and verified on an emulator against the mock — chat (send/emergency), position sharing with distance decimation, roster rename, staged-then-explicit config writes, node-computed airtime stats. The **first-run flow** also landed (splash → permissions → battery → node URL, re-enterable from Config), with BLE permissions declared per §5. Per-client *position* cursors, backlog resume, the phone's own GPS, and the `SyncService` are what remain.
+
+**BLE is still Phase 03.** Permissions and onboarding exist; nothing opens a GATT connection. Do not add UI that implies a live BLE link before the board is in hand — the app says `ble link · phase 03 · needs the board` on purpose. No hardware until **Phase 03**, where the toolchain, USB-JTAG breakpoint, SoftAP + BLE advertising, and the un-mockable BLE GATT path all land. The firmware skeleton under `firmware/` (partitions, sdkconfig.defaults, LittleFS mount in `app_main`) is parked until then; ESP-IDF not yet installed on this machine. Repo: github.com/MKS-01/lokalgrid.
 
 ## Stack — already decided, do not relitigate
 
@@ -20,6 +22,7 @@ The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is 
 - BLE: NimBLE. LoRa: RadioLib as an IDF component. FS: `esp_littlefs`.
 - Client: **native Android app (Kotlin)**. The PWA/web-client plan was **removed 2026-07-20** (superseded decision in section 2) — background BLE sync via a foreground service is the feature a browser cannot do. Do not reintroduce a web client without reading that entry.
 - Codec is **hand-written until Phase 05**. Do not introduce schema/codegen early — the drift bug is the point.
+- Wire split: positions are **binary** 32-byte records; control (hello, roster, chat, queue state, refusals) is **one JSON object per text frame**, both directions. Protobuf replaces the JSON at Phase 05, not before.
 
 ## Hard invariants
 
@@ -31,9 +34,13 @@ The roadmap was restructured **mock-first** (2026-07-23, section 7): the app is 
 - Do not copy Meshtastic firmware source (GPL). Reading for architecture is fine; write from the protocol spec.
 - BLE chunks carry **whole records only**, sized from the negotiated MTU at runtime.
 
+## No real names anywhere in this repo
+
+Clients are **callsigns from the NATO alphabet** (`alpha`, `bravo`, `charlie`, …) in code, tests, docs, wireframes and screenshots. Never a personal first name, even as sample data — an earlier pass used real-sounding names and they were replaced project-wide on 2026-07-25.
+
 ## UI rule that is easy to get wrong
 
-Every rendered position carries its uncertainty — error ellipse from HDOP, dashed interpolated segments, age labels on stale fixes. Never a crisp dot. Queue state is shown as a reason ("queued 40 s, ravi ahead of you"), never a spinner.
+Every rendered position carries its uncertainty — error ellipse from HDOP, dashed interpolated segments, age labels on stale fixes. Never a crisp dot. Queue state is shown as a reason ("queued 40 s, bravo ahead of you"), never a spinner.
 
 ## Working style for this repo
 
