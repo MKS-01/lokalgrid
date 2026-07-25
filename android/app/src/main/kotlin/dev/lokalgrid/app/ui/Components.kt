@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +31,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.lokalgrid.app.ui.theme.Lg
 
 // The design vocabulary from the wireframes (§07): sysbar, appbar, lbl, row,
@@ -45,6 +49,22 @@ private val Mono = FontFamily.Monospace
  * row you most need to see.
  */
 val ScrollGap = 28.dp
+
+/**
+ * Re-read the OS-owned facts every time the screen comes back to the front.
+ * Permissions, battery buckets and the location switch all change in Settings
+ * behind the app's back, and a cached "granted" is exactly the kind of lie this
+ * UI must not tell.
+ */
+@Composable
+fun OnResumeEffect(block: () -> Unit) {
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) block() }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+}
 
 enum class PillKind(val fg: Color, val bg: Color) {
     OK(Lg.Lock, Lg.LockBg),
@@ -95,6 +115,29 @@ fun InfoRow(label: String, value: String? = null, trailing: (@Composable () -> U
             trailing != null -> trailing()
             value != null -> Text(value, color = Lg.Ink, fontFamily = Mono, fontSize = 11.sp)
         }
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Lg.Rule2))
+}
+
+/**
+ * A row whose value is a sentence rather than a number: label above, reason
+ * below, both full width. `InfoRow` puts the two on one line, which is right for
+ * "battery 82%" and wrong for "your phone's fix is 9893 s old" — that wraps into
+ * the label and the row stops being readable. Reasons are the content this UI
+ * exists to show (§6), so they get room instead of truncation.
+ */
+@Composable
+fun ReasonRow(label: String, text: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+        Text(label, color = Lg.Ink2, fontFamily = Mono, fontSize = 11.sp)
+        Text(
+            text,
+            color = Lg.Ink,
+            fontFamily = Mono,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(Lg.Rule2))
 }

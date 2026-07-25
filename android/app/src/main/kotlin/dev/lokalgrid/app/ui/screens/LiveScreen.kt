@@ -20,15 +20,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.app.loc.PhoneLocation
 import dev.lokalgrid.app.ui.BigValue
 import dev.lokalgrid.app.ui.InfoRow
 import dev.lokalgrid.app.ui.LgButton
 import dev.lokalgrid.app.ui.LgTextField
 import dev.lokalgrid.app.ui.Pill
 import dev.lokalgrid.app.ui.PillKind
+import dev.lokalgrid.app.ui.ReasonRow
 import dev.lokalgrid.app.ui.ScrollGap
 import dev.lokalgrid.app.ui.SectionLabel
 import dev.lokalgrid.app.ui.accuracyMeters
+import dev.lokalgrid.app.ui.gpsKind
+import dev.lokalgrid.app.ui.gpsLabel
+import dev.lokalgrid.app.ui.myPeer
 import dev.lokalgrid.app.ui.peersOf
 import dev.lokalgrid.app.ui.relative
 import dev.lokalgrid.app.ui.staleness
@@ -62,6 +67,9 @@ fun LiveScreen(
             InfoRow("status", state.status)
             InfoRow("waiting", "no fix yet")
             InfoRow("node url", state.url)
+            // Your own GPS does not depend on the node, so it is shown even with
+            // nothing arriving — the app is not gated behind a live link.
+            YourPosition(state)
             return@Column
         }
 
@@ -74,11 +82,17 @@ fun LiveScreen(
         InfoRow("altitude", if (r.baro == TrackRecord.BARO_ABSENT) "${r.alt} m · no baro" else "${r.alt} m · baro ${r.baro}")
         if (!r.timeValid) InfoRow("time") { Pill("invalid — repair on client", PillKind.WARN) }
 
+        YourPosition(state)
+        val me = myPeer(state)
+
         val peers = peersOf(state)
         SectionLabel("people · ${peers.size + 1} on this node")
         InfoRow("you (${state.selfName})") { Pill("here", PillKind.OK) }
         for (p in peers) {
-            InfoRow(if (p.ghost) "${p.name} · ghost" else p.name) { Pill(relative(r, p), p.staleness()) }
+            InfoRow(if (p.ghost) "${p.name} · ghost" else p.name) {
+                // Measured from your phone when it knows, from the node otherwise.
+                Pill(me?.let { relative(it, p) } ?: relative(r, p), p.staleness())
+            }
         }
         if (peers.isEmpty()) InfoRow("nobody else", "no peer has shared a position yet")
 
@@ -113,7 +127,11 @@ fun LiveScreen(
 
         // The forward flow, on this tab: your position, and your callsign.
         SectionLabel("actions")
-        state.lastPeerSkip?.let { InfoRow("last position", it) }
+        state.lastPeerSkip?.let { ReasonRow("last position", it) }
+        // What the button will actually send, before it is pressed — the same rule
+        // as showing a message's airtime cost up front (§2, the airtime economy).
+        InfoRow("will share", if (me != null) "your phone's fix" else "the node's fix, labelled")
+        state.lastShareSource?.let { ReasonRow("last shared", it) }
         LgButton(
             if (state.positionsShared > 0) "Share my position (${state.positionsShared} sent)" else "Share my position",
             primary = true,
@@ -139,5 +157,40 @@ fun LiveScreen(
             }
         }
         LgButton("Reset the track", enabled = state.connected, onClick = onResetTrack)
+    }
+}
+
+/**
+ * Where *this phone* is — a separate section from the node's fix, because they are
+ * two different claims. Sharing used to offer the node's fix as yours; it was
+ * honest for a phone sitting next to the node, and it is now the fallback rather
+ * than the answer.
+ *
+ * Every non-fix state says why, so an empty position never reads as a broken app.
+ */
+@Composable
+private fun YourPosition(state: LiveState) {
+    val me = myPeer(state)
+    SectionLabel("your position · this phone")
+    InfoRow("gps") { Pill(gpsLabel(state), gpsKind(state)) }
+    if (me != null) {
+        BigValue(
+            "%.5f %s\n%.5f %s".format(
+                abs(me.latDeg), if (me.latDeg >= 0) "N" else "S",
+                abs(me.lonDeg), if (me.lonDeg >= 0) "E" else "W",
+            )
+        )
+        if (!state.fineLocation) {
+            InfoRow("precision", "coarse only — the ring is the accuracy you granted")
+        }
+    }
+    when (state.gps) {
+        is PhoneLocation.State.NotGranted ->
+            ReasonRow("why not", "location is asked for when you share, not at startup")
+        is PhoneLocation.State.ProvidersOff ->
+            ReasonRow("why not", "turn location on in system settings")
+        is PhoneLocation.State.Waiting ->
+            ReasonRow("why not", "a cold GNSS start takes a minute outdoors, longer inside")
+        is PhoneLocation.State.Live -> {}
     }
 }

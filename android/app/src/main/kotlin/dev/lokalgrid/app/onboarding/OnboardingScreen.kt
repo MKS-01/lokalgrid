@@ -123,7 +123,7 @@ private fun StepIntro() {
                 "with LoRa as the link out. No carrier, no internet, no server."
         )
         SectionLabel("what this app shows you")
-        InfoRow("positions", "yours and everyone's")
+        InfoRow("positions", "yours, from this phone, and everyone's")
         InfoRow("uncertainty", "always — ring, age, 2D/3D")
         InfoRow("chat", "one shared channel, text only")
         InfoRow("the queue", "why a message is waiting")
@@ -167,11 +167,13 @@ private fun StepPermissions(context: Context) {
             Note(Setup.why(p))
         }
 
-        SectionLabel("not asked for")
-        InfoRow("location") { Pill("never", PillKind.OK) }
+        SectionLabel("not asked for here")
+        InfoRow("location") { Pill("later, at the tap", PillKind.NEUTRAL) }
         Note(
-            "BLUETOOTH_SCAN is declared neverForLocation, so no location permission is " +
-                "needed. Position comes from the node over a connection, never from a scan."
+            "BLUETOOTH_SCAN is declared neverForLocation, so finding the node never needs " +
+                "your location. Sharing where you are does — so that permission is asked for " +
+                "the first time you tap \"Share my position\", where the reason is on screen. " +
+                "Refuse it and the app still works; your dot just isn't on the map."
         )
 
         if (wanted.isNotEmpty() && wanted.any { granted[it] != true }) {

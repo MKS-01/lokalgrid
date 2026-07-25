@@ -179,9 +179,12 @@ wss.on('connection', (ws, req) => {
     posNewest: history.newestSeq,
     posHeld: history.count,
   });
-  // Backfill the shared channel from what the node still holds, then the state
-  // the other tabs render: config in force, everyone's last known position.
-  for (const m of hub.since(0)) send(ws, { type: 'chat', ...m });
+  // Chat backfill is *not* pushed here. The client states its own chat cursor
+  // right after `hello` and the node answers that (see 'cursor' below) — pushing
+  // history as well sent every message twice, which is the ownership rule (§3)
+  // broken in the node's favour: the client is authoritative about what it has
+  // received, so the node must answer rather than assume. Positions already
+  // worked this way; chat now does too.
   send(ws, { type: 'config', ...config.snapshot() });
   for (const p of peers.list()) send(ws, { type: 'peer', ...p });
   broadcastRoster();

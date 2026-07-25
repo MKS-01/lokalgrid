@@ -8,7 +8,10 @@ lifecycle = "2.8.7"
 activityCompose = "1.9.3"
 composeBom = "2024.10.01"
 okhttp = "4.12.0"
-maplibre = "11.5.2"
+# 11.8.8+ is the first line whose libmaplibre.so is built with 16 KB ELF
+# alignment (LOAD p_align 0x4000). Below that the app cannot load the map on a
+# 16 KB-page device — Android 15+ hardware and the emulator's 16 KB image.
+maplibre = "11.11.0"
 serialization = "1.7.3"
 junit = "4.13.2"
 

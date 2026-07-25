@@ -17,6 +17,16 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
+    <!-- The phone's own GNSS, for "share my position" — asked for at the tap, not
+         at first run. This does not weaken `neverForLocation` above: that says the
+         app never derives a position from a *BLE scan*, and it still doesn't. Here
+         the user is deliberately telling the group where they are. COARSE is
+         listed because Android lets the user grant only that, and a 1 km fix with
+         a 1 km ring is still true (§6). Background location is not requested —
+         sharing happens while the app is open. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- The background-sync foreground service must post a notification or
          Android kills it. The service itself lands with BLE in Phase 03/07. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

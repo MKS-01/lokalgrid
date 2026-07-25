@@ -56,6 +56,8 @@ private const val SRC_ACC = "lg-acc"
 private const val SRC_PEERS_DOT = "lg-peers-dot"
 private const val SRC_PEERS_ACC = "lg-peers-acc"
 private const val SRC_TRACK = "lg-track"
+private const val SRC_ME_DOT = "lg-me-dot"
+private const val SRC_ME_ACC = "lg-me-acc"
 
 /** Keyless raster basemaps — no API key, no quota. The offline PMTiles basemap
  *  (§6) replaces these later; for now the user can switch source at runtime. */
@@ -85,6 +87,8 @@ private class MapHolder {
     var acc: GeoJsonSource? = null
     var peersDot: GeoJsonSource? = null
     var peersAcc: GeoJsonSource? = null
+    var meDot: GeoJsonSource? = null
+    var meAcc: GeoJsonSource? = null
     var track: GeoJsonSource? = null
     var centeredOnce = false
 }
@@ -99,6 +103,7 @@ private fun applyStyle(
     latest: TrackRecord?,
     peers: List<Peer>,
     track: List<TrackRecord>,
+    me: Peer?,
 ) {
     map.setStyle(Style.Builder().fromJson(styleJson(b))) { style ->
         // The observed track, under everything else. This is what the position
@@ -175,10 +180,54 @@ private fun applyStyle(
         )
         holder.dot = dot
         holder.acc = acc
+
+        // You, from the phone's own GNSS — added last so it draws over everything.
+        // A solid ring rather than the peers' dashed one: this uncertainty is
+        // first-hand and current, theirs is second-hand and as old as its age pill.
+        val meAcc = GeoJsonSource(SRC_ME_ACC)
+        val meDot = GeoJsonSource(SRC_ME_DOT)
+        style.addSource(meAcc)
+        style.addSource(meDot)
+        val meColor = Color.parseColor("#E4EBE8")
+        style.addLayer(
+            FillLayer("lg-me-acc-fill", SRC_ME_ACC).withProperties(
+                PropertyFactory.fillColor(meColor),
+                PropertyFactory.fillOpacity(0.10f)
+            )
+        )
+        style.addLayer(
+            LineLayer("lg-me-acc-line", SRC_ME_ACC).withProperties(
+                PropertyFactory.lineColor(meColor),
+                PropertyFactory.lineWidth(1.5f)
+            )
+        )
+        style.addLayer(
+            CircleLayer("lg-me-dot", SRC_ME_DOT).withProperties(
+                PropertyFactory.circleRadius(7f),
+                PropertyFactory.circleColor(meColor),
+                PropertyFactory.circleStrokeColor(Color.parseColor("#0A0F0E")),
+                PropertyFactory.circleStrokeWidth(2f)
+            )
+        )
+        holder.meDot = meDot
+        holder.meAcc = meAcc
+
         latest?.let { pushFix(holder, it) }
         pushPeers(holder, peers)
+        pushMe(holder, me)
         pushTrack(holder, track)
     }
+}
+
+/** Your own position, or an empty collection — never a stale dot left behind. */
+private fun pushMe(holder: MapHolder, me: Peer?) {
+    if (me == null) {
+        holder.meDot?.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()))
+        holder.meAcc?.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()))
+        return
+    }
+    holder.meDot?.setGeoJson(Point.fromLngLat(me.lonDeg, me.latDeg))
+    holder.meAcc?.setGeoJson(geoCircle(me.latDeg, me.lonDeg, me.accuracyM))
 }
 
 private fun pushFix(holder: MapHolder, r: TrackRecord) {
@@ -213,6 +262,7 @@ fun MapLibreView(
     latest: TrackRecord?,
     peers: List<Peer> = emptyList(),
     track: List<TrackRecord> = emptyList(),
+    me: Peer? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -256,20 +306,24 @@ fun MapLibreView(
                         // hide the built-in +/- since we provide our own
                         isCompassEnabled = true
                     }
-                    applyStyle(map, basemap, holder, latest, peers, track)
+                    applyStyle(map, basemap, holder, latest, peers, track, me)
                 }
                 mapView
             },
             modifier = Modifier.fillMaxSize(),
             update = {
                 pushPeers(holder, peers)
+                pushMe(holder, me)
                 pushTrack(holder, track)
-                val r = latest ?: return@AndroidView
-                pushFix(holder, r)
+                latest?.let { pushFix(holder, it) }
                 val map = holder.map ?: return@AndroidView
+                // Open on where *you* are when the phone knows, on the node's fix
+                // otherwise — whichever arrives first, once.
+                val target = me?.let { LatLng(it.latDeg, it.lonDeg) }
+                    ?: latest?.let { LatLng(it.latDeg, it.lonDeg) }
+                    ?: return@AndroidView
                 if (!holder.centeredOnce) {
-                    map.cameraPosition = CameraPosition.Builder()
-                        .target(LatLng(r.latDeg, r.lonDeg)).zoom(16.0).build()
+                    map.cameraPosition = CameraPosition.Builder().target(target).zoom(16.0).build()
                     holder.centeredOnce = true
                 }
             }
@@ -283,7 +337,7 @@ fun MapLibreView(
             for (b in BASEMAPS) {
                 StyleChip(b.name, active = b.name == basemap.name) {
                     basemap = b
-                    holder.map?.let { applyStyle(it, b, holder, latest, peers, track) }
+                    holder.map?.let { applyStyle(it, b, holder, latest, peers, track, me) }
                 }
             }
         }
@@ -293,11 +347,13 @@ fun MapLibreView(
             Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Recentre on you first — your own fix is what this button means once
+            // the phone has one; the node's fix is the fallback, not the default.
             MapButton("⌖") {
-                val r = latest ?: return@MapButton
-                holder.map?.animateCamera(
-                    CameraUpdateFactory.newLatLngZoom(LatLng(r.latDeg, r.lonDeg), 17.0)
-                )
+                val target = me?.let { LatLng(it.latDeg, it.lonDeg) }
+                    ?: latest?.let { LatLng(it.latDeg, it.lonDeg) }
+                    ?: return@MapButton
+                holder.map?.animateCamera(CameraUpdateFactory.newLatLngZoom(target, 17.0))
             }
             MapButton("+") { holder.map?.animateCamera(CameraUpdateFactory.zoomIn()) }
             MapButton("−") { holder.map?.animateCamera(CameraUpdateFactory.zoomOut()) }

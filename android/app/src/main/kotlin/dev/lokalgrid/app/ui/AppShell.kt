@@ -1,5 +1,7 @@
 package dev.lokalgrid.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,11 +26,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.app.loc.PhoneLocation
 import dev.lokalgrid.app.ui.screens.ChatScreen
 import dev.lokalgrid.app.ui.screens.ClientsScreen
 import dev.lokalgrid.app.ui.screens.ConfigScreen
@@ -50,10 +54,38 @@ fun AppShell(
     onWriteConfig: (Map<String, String>) -> Unit = {},
     onReopenSetup: () -> Unit = {},
     onReconnect: () -> Unit = {},
+    onLocationChanged: () -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var showDiag by remember { mutableStateOf(false) }
     var showLink by remember { mutableStateOf(false) }
+
+    // Location is asked for here, at the tap, because this is the one action that
+    // needs it — the first-run flow deliberately does not ask (§6: ask when the
+    // reason is on screen). If the user grants it, the share they asked for still
+    // happens; if they refuse, the share still happens using the node's fix, and
+    // says so.
+    val context = LocalContext.current
+    var shareAfterGrant by remember { mutableStateOf(false) }
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        onLocationChanged()
+        if (shareAfterGrant) {
+            shareAfterGrant = false
+            onSharePosition()
+        }
+    }
+    val sharePosition: () -> Unit = {
+        if (PhoneLocation.granted(context)) {
+            onSharePosition()
+        } else {
+            shareAfterGrant = true
+            locationLauncher.launch(PhoneLocation.PERMISSIONS.toTypedArray())
+        }
+    }
+    // Granted or revoked in Settings behind our back: re-read on every return.
+    OnResumeEffect { onLocationChanged() }
 
     Column(
         Modifier
@@ -67,8 +99,8 @@ fun AppShell(
         AppBar(tab, state, onLongPressTitle = { showDiag = !showDiag })
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
-                Tab.LIVE -> LiveScreen(state, onSharePosition, onRename, onResetTrack)
-                Tab.MAP -> MapScreen(state, onSharePosition)
+                Tab.LIVE -> LiveScreen(state, sharePosition, onRename, onResetTrack)
+                Tab.MAP -> MapScreen(state, sharePosition)
                 Tab.CHAT -> ChatScreen(state, onSendChat)
                 Tab.CLIENTS -> ClientsScreen(state, onRename)
                 Tab.CONFIG -> ConfigScreen(state, onWriteConfig, onReopenSetup)
@@ -204,6 +236,10 @@ private fun DiagnosticsOverlay(state: LiveState, onClose: () -> Unit) {
         InfoRow("dropped", state.dropped.toString())
         state.lastDrop?.let { InfoRow("last drop", it) }
         InfoRow("you", "${state.selfName} (id ${state.selfId})")
+        InfoRow("phone gps", gpsLabel(state))
+        InfoRow("location grant", if (state.fineLocation) "fine" else "coarse or none")
+        state.myFix?.let { InfoRow("my fix", "%.6f, %.6f".format(it.latDeg, it.lonDeg)) }
+        state.lastShareSource?.let { InfoRow("last shared", it) }
         InfoRow("clients", "${state.clientCount} of ${state.cap}")
         InfoRow("duty cycle", "${"%.2f".format(state.duty * 100)}%")
         InfoRow("messages", state.messages.size.toString())

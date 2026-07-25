@@ -2,7 +2,9 @@ package dev.lokalgrid.app
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.lokalgrid.app.loc.PhoneLocation
 import dev.lokalgrid.app.net.NodeClient
+import dev.lokalgrid.app.ui.hdopTimes10
 import dev.lokalgrid.protocol.ClientFrame
 import dev.lokalgrid.protocol.Lane
 import dev.lokalgrid.protocol.NodeFrame
@@ -25,6 +27,14 @@ private const val DEFAULT_URL = "ws://10.0.2.2:8787"
  * about (§3 ownership rule), so the UI can say exactly what is true.
  */
 data class ChatEntry(
+    /**
+     * A local, monotonic row id. Only the list needs it: `msgId` is null for other
+     * people's messages and `seq` is the node's to assign, so neither is a key we
+     * can *guarantee* is unique — and a duplicate key crashes a `LazyColumn`
+     * outright. A node that repeats itself must render oddly, never take the app
+     * down; the reducer above is what keeps repeats from becoming two rows.
+     */
+    val rowId: Long = 0,
     val msgId: String? = null,     // our id for it; null for other people's messages
     val seq: Long = 0,             // node-assigned; 0 = not acknowledged yet
     val from: Int = -1,
@@ -39,7 +49,7 @@ data class ChatEntry(
     val relayed: Boolean = false,     // actually went out over the radio
     val error: String? = null,        // refused, with the node's reason
 ) {
-    val key: String get() = msgId ?: "seq-$seq"
+    val key: Long get() = rowId
 }
 
 data class LiveState(
@@ -65,6 +75,11 @@ data class LiveState(
     val config: NodeFrame.Config? = null,            // the config in force on the node
     val lastConfigResult: NodeFrame.ConfigResult? = null,
     val stats: NodeFrame.Stats? = null,              // airtime accounting from the node
+    // the phone's own GPS — what *you* contribute to the map
+    val gps: PhoneLocation.State = PhoneLocation.State.NotGranted,
+    val myFix: PhoneLocation.Fix? = null,   // last fix from this phone, kept with its age
+    val fineLocation: Boolean = false,      // precise, or coarse-only
+    val lastShareSource: String? = null,    // which fix actually went, stated plainly
     // position cursor + backlog resume
     val posCursor: Long = 0,          // last position seq we have; ours to state, not guess
     val posHeld: Int = 0,             // how many the node still holds
@@ -94,10 +109,18 @@ data class LiveState(
 /** How much observed track to keep in memory for the map. Room replaces this later (§6). */
 private const val TRACK_KEEP = 1500
 
+/**
+ * How old the phone's own fix may be and still be worth sharing. Past this it is
+ * history, not a position — and the node's fix, clearly labelled, is the more
+ * honest thing to offer.
+ */
+private const val MY_FIX_MAX_AGE_S = 120L
+
 class LiveViewModel(
     private val url: String = DEFAULT_URL,
     private val savedCursor: Long = 0,
     private val onCursor: (Long) -> Unit = {},
+    private val gps: PhoneLocation? = null,
 ) : ViewModel() {
 
     private val client = NodeClient(url)
@@ -106,11 +129,40 @@ class LiveViewModel(
 
     private var msgCounter = 0
 
+    /** Row ids for the chat list — local, monotonic, never from the wire. */
+    private var rowCounter = 0L
+    private fun nextRowId(): Long = ++rowCounter
+
     private var lastSaved = savedCursor
     private var link: Job? = null
+    private var gpsJob: Job? = null
 
     init {
         connect()
+        watchGps()
+    }
+
+    /**
+     * Listen to the phone's own GNSS. Re-callable, because the answer changes
+     * outside the app: a permission granted in a dialog, or location switched off
+     * in Settings, both need the flow rebuilt rather than a stale state left on
+     * screen claiming something that is no longer true.
+     */
+    fun watchGps() {
+        val src = gps ?: return
+        gpsJob?.cancel()
+        _state.value = _state.value.copy(fineLocation = src.fineGranted())
+        gpsJob = viewModelScope.launch {
+            src.updates().collect { st ->
+                _state.value = _state.value.copy(
+                    gps = st,
+                    // A fix survives a later ProvidersOff/NotGranted: it is still
+                    // the last place we know this phone was, and its age says how
+                    // much to trust it. Dropping it would erase a true fact.
+                    myFix = (st as? PhoneLocation.State.Live)?.fix ?: _state.value.myFix,
+                )
+            }
+        }
     }
 
     private fun connect() {
@@ -157,6 +209,7 @@ class LiveViewModel(
         val id = "m-${msgCounter++}-${System.currentTimeMillis() % 100_000}"
         val lane = if (emergency) Lane.EMERGENCY else Lane.MESSAGE
         val pending = ChatEntry(
+            rowId = nextRowId(),
             msgId = id,
             name = _state.value.selfName,
             from = _state.value.selfId,
@@ -194,23 +247,52 @@ class LiveViewModel(
      * Share where *you* are. The node decides whether it moved far enough to be
      * worth the link (decimation by distance, §3) and answers either way.
      *
-     * Until the app has its own GPS permission, this offers the node's own fix as
-     * our position — honest for a phone sitting next to the node, and it exercises
-     * the whole path. Replaced by the phone's fix when location lands.
+     * The phone's own GNSS is the position when it has one. When it does not —
+     * permission refused, location off, GNSS still cold — the node's fix goes
+     * instead and the UI *says* that it was the node's, which is honest for a
+     * phone standing next to the node and keeps the path exercised. What never
+     * happens is a position going out under a source nobody stated.
      */
     fun shareMyPosition() {
-        val fix = _state.value.latest ?: run {
-            _state.value = _state.value.copy(lastPeerSkip = "no fix to share yet")
-            return
+        val s = _state.value
+        val mine = s.myFix?.takeIf { it.ageS() <= MY_FIX_MAX_AGE_S }
+        val frame: ClientFrame.Pos
+        val source: String
+        if (mine != null) {
+            frame = ClientFrame.Pos(
+                latE7 = mine.latE7,
+                lonE7 = mine.lonE7,
+                hd = hdopTimes10(mine.accuracyM),
+                epoch = mine.epochS,
+            )
+            source = "your phone · ${mine.provider} · ±${accuracyLabel(mine.accuracyM)}"
+        } else {
+            val node = s.latest ?: run {
+                _state.value = s.copy(lastPeerSkip = noFixReason(s), lastShareSource = null)
+                return
+            }
+            frame = ClientFrame.Pos(latE7 = node.latE7, lonE7 = node.lonE7, hd = node.hd, epoch = node.epoch)
+            source = "the node's own fix — ${noFixReason(s)}"
         }
-        val ok = client.send(
-            ClientFrame.Pos(latE7 = fix.latE7, lonE7 = fix.lonE7, hd = fix.hd, epoch = fix.epoch)
-        )
+        val ok = client.send(frame)
         _state.value = _state.value.copy(
-            positionsShared = _state.value.positionsShared + 1,
+            positionsShared = if (ok) _state.value.positionsShared + 1 else _state.value.positionsShared,
+            lastShareSource = if (ok) source else null,
             lastPeerSkip = if (ok) _state.value.lastPeerSkip else "not shared — no link to the node",
         )
     }
+
+    /** Why the phone's own fix wasn't used — a reason, always, never a silence. */
+    private fun noFixReason(s: LiveState): String = when {
+        gps == null -> "no location source on this build"
+        s.gps is PhoneLocation.State.NotGranted -> "location not granted to this app"
+        s.gps is PhoneLocation.State.ProvidersOff -> "location is switched off on this phone"
+        s.myFix != null -> "your phone's fix is ${s.myFix.ageS()} s old"
+        else -> "your phone has no fix yet — a cold GNSS start takes a minute outdoors"
+    }
+
+    private fun accuracyLabel(accuracyM: Double): String =
+        if (accuracyM <= 0) "unknown" else "%.0f m".format(accuracyM)
 
     /** Write staged config. Explicit, never mid-edit (§6). */
     fun writeConfig(patch: Map<String, String>) {
@@ -286,11 +368,18 @@ class LiveViewModel(
             peers = s.peers.filter { p -> f.clients.any { it.id == p.id } },
         )
 
-        // The authoritative record of a message. If it echoes one of ours, we
-        // upgrade the pending bubble in place instead of showing it twice.
+        // The authoritative record of a message. If it echoes one we already hold
+        // — our own pending bubble, or a message the node re-sent because we
+        // asked for a backlog that overlapped — we upgrade it in place instead of
+        // showing it twice. `seq` is the node's identity for a message (§3), so
+        // two frames with the same seq are one message, not two.
         is NodeFrame.Chat -> {
-            val i = s.messages.indexOfFirst { it.mine && it.msgId != null && it.msgId == f.msgId }
+            val i = s.messages.indexOfFirst {
+                (it.mine && it.msgId != null && it.msgId == f.msgId) ||
+                    (f.seq > 0 && it.seq == f.seq)
+            }
             val entry = ChatEntry(
+                rowId = nextRowId(),
                 msgId = f.msgId,
                 seq = f.seq,
                 from = f.from,
@@ -305,10 +394,16 @@ class LiveViewModel(
                 val old = s.messages[i]
                 s.copy(messages = s.messages.toMutableList().also {
                     it[i] = entry.copy(
-                        mine = true,
+                        // Keep the row's identity and our queue state: the node's
+                        // echo carries what it knows, not what we know about the
+                        // link out — and the row must not jump in the list.
+                        rowId = old.rowId,
+                        msgId = entry.msgId ?: old.msgId,
+                        mine = entry.mine || old.mine,
                         relayReason = old.relayReason,
                         relayEtaMs = old.relayEtaMs,
                         relayed = old.relayed,
+                        error = old.error,
                     )
                 })
             } else {

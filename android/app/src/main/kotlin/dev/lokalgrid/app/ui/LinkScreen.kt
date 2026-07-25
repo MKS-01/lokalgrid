@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,10 +27,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.app.loc.PhoneLocation
 import dev.lokalgrid.app.onboarding.Setup
 import dev.lokalgrid.app.ui.theme.Lg
 
@@ -68,9 +65,11 @@ fun LinkScreen(
     val wanted = remember { Setup.blePermissions + Setup.notificationPermission }
     var granted by remember { mutableStateOf(Setup.allGranted(context, wanted)) }
     var battery by remember { mutableStateOf(Setup.batteryExempt(context)) }
-    OnResume {
+    var location by remember { mutableStateOf(PhoneLocation.granted(context)) }
+    OnResumeEffect {
         granted = Setup.allGranted(context, wanted)
         battery = Setup.batteryExempt(context)
+        location = PhoneLocation.granted(context)
     }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -104,12 +103,24 @@ fun LinkScreen(
             title = "permissions",
             state = if (wanted.isEmpty() || granted) StepState.DONE else StepState.NEEDS_YOU,
             detail = if (wanted.isEmpty()) "granted at install on this Android version"
-            else if (granted) "bluetooth and notifications granted · location never asked"
+            else if (granted) "bluetooth and notifications granted"
             else "bluetooth is needed before the node can be reached over BLE",
         )
         if (wanted.isNotEmpty() && !granted) {
             LgButton("Grant Bluetooth permissions", primary = true) { launcher.launch(wanted.toTypedArray()) }
         }
+        // Location is a separate row because it is a separate promise: never used
+        // to find the node, only to say where *you* are when you ask it to.
+        InfoRow("location") {
+            Pill(
+                if (location) "granted · for sharing only" else "not granted",
+                if (location) PillKind.OK else PillKind.NEUTRAL,
+            )
+        }
+        Note(
+            if (location) "Used only when you tap \"Share my position\". BLUETOOTH_SCAN stays neverForLocation — the app never derives a position from a scan."
+            else "Not needed to use the app. Asked for at the tap on \"Share my position\"; without it the node's own fix is shared instead, labelled as the node's."
+        )
         InfoRow("battery") {
             Pill(if (battery) "exempt" else "restricted", if (battery) PillKind.OK else PillKind.WARN)
         }
@@ -174,6 +185,8 @@ fun LinkScreen(
         InfoRow("node log", if (state.posOldest > 0) "seq ${state.posOldest} … ${state.posNewestKnown}" else "unknown")
         InfoRow("track held", "${state.track.size} points")
         InfoRow("messages", "${state.messages.size}")
+        InfoRow("your gps") { Pill(gpsLabel(state), gpsKind(state)) }
+        state.lastShareSource?.let { ReasonRow("last shared", it) }
         state.gapReason?.let {
             InfoRow("gap") { Pill("${state.lostBefore} lost", PillKind.WARN) }
             Note(it)
@@ -207,15 +220,4 @@ private fun Note(text: String) {
         color = Lg.Ink3, fontFamily = Mono, fontSize = 9.sp, lineHeight = 14.sp,
         modifier = Modifier.padding(top = 2.dp),
     )
-}
-
-/** Re-read the OS-owned facts every time the screen comes back to the front. */
-@Composable
-private fun OnResume(block: () -> Unit) {
-    val owner = LocalLifecycleOwner.current
-    DisposableEffect(owner) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) block() }
-        owner.lifecycle.addObserver(obs)
-        onDispose { owner.lifecycle.removeObserver(obs) }
-    }
 }

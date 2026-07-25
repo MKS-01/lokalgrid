@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.lokalgrid.app.loc.PhoneLocation
 import dev.lokalgrid.app.onboarding.OnboardingScreen
 import dev.lokalgrid.app.ui.AppShell
 import dev.lokalgrid.app.ui.BOOT_GRACE_MS
@@ -40,6 +41,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val prefs = Prefs(this)
+        // One source per process, held by the application context: the fixes belong
+        // to the phone, not to whichever node the ViewModel is currently keyed on.
+        val gps = PhoneLocation(this)
 
         setContent {
             // Fixed dark scheme from the master-plan palette — not dynamic colour;
@@ -74,7 +78,7 @@ class MainActivity : ComponentActivity() {
                         // covering real work rather than padding a timer.
                         key(url) {
                             val vm: LiveViewModel =
-                                viewModel(factory = LiveViewModelFactory(url, prefs))
+                                viewModel(factory = LiveViewModelFactory(url, prefs, gps))
                             val state by vm.state.collectAsStateWithLifecycle()
 
                             // Hold the boot screen until the first connection attempt
@@ -109,6 +113,10 @@ class MainActivity : ComponentActivity() {
                                         route = Route.ONBOARDING
                                     },
                                     onReconnect = vm::reconnect,
+                                    // Location can be granted or revoked outside the
+                                    // app, so the GPS flow is rebuilt on demand rather
+                                    // than trusted from startup.
+                                    onLocationChanged = vm::watchGps,
                                 )
                             }
                         }
@@ -127,11 +135,13 @@ class MainActivity : ComponentActivity() {
 private class LiveViewModelFactory(
     private val url: String,
     private val prefs: Prefs,
+    private val gps: PhoneLocation,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = LiveViewModel(
         url = url,
         savedCursor = prefs.posCursor(url),
         onCursor = { prefs.setPosCursor(url, it) },
+        gps = gps,
     ) as T
 }

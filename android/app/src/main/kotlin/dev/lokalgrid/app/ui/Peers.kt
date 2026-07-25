@@ -62,8 +62,14 @@ fun peersOf(state: LiveState): List<Peer> {
 }
 
 /** "260 m NE · 2 min" — distance, 8-point compass, and age, for the people rows. */
-fun relative(self: TrackRecord, p: Peer): String {
-    val (meters, bearing) = distanceBearing(self.latDeg, self.lonDeg, p.latDeg, p.lonDeg)
+fun relative(self: TrackRecord, p: Peer): String = relative(self.latDeg, self.lonDeg, p)
+
+/** The same, measured from your own phone fix rather than the node's — which is
+ *  the question you actually meant to ask once your phone knows where it is. */
+fun relative(self: Peer, p: Peer): String = relative(self.latDeg, self.lonDeg, p)
+
+fun relative(fromLat: Double, fromLon: Double, p: Peer): String {
+    val (meters, bearing) = distanceBearing(fromLat, fromLon, p.latDeg, p.lonDeg)
     val dist = if (meters < 1000) "${meters.roundToInt()} m" else "%.1f km".format(meters / 1000)
     val age = when {
         p.ageSec < 90 -> "now"

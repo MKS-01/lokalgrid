@@ -1,5 +1,35 @@
 # Build log
 
+## 2026-07-26 — your own dot from your own GPS, plus the chat crash and 16 KB pages
+
+**Tried:** the next thing on the Phase 02 list — the phone's own GNSS behind *share my position*. Until now the app offered the **node's** fix as yours, which was honest for a phone sitting next to the node and exercised the whole forward path, but it is not the thing.
+
+New: `app/loc/PhoneLocation.kt` — a `callbackFlow` over `LocationManager` (GPS + network provider), emitting a state that names itself: `NotGranted · ProvidersOff · Waiting · Live(fix)`. Deliberately **not** Play Services' fused provider: no Google dependency, and fused smooths exactly the uncertainty §6 says must be rendered. Each fix carries `accuracyM` and an age taken from `elapsedRealtimeNanos`, so the age survives a wall-clock change. `getLastKnownLocation` is offered immediately — with its real age, which is how a 9893-second-old emulator fix correctly refused to be shared.
+
+Three judgement calls worth keeping:
+
+1. **Permission at the tap, not at first run.** Setup asks for Bluetooth and notifications; location is asked for the first time you press *Share my position*, where the reason is on screen. `neverForLocation` on `BLUETOOTH_SCAN` is untouched and still true — finding the node needs no location. Recorded as a dated row in PROJECT.md §2 because it narrows the old "no location permission at all" claim in §5, and the onboarding copy that said `location · never` was a lie the moment this shipped. It now says `later, at the tap`, and the Link screen carries a `granted · for sharing only` row.
+2. **The fallback stays, and states itself.** No phone fix (refused, location off, GNSS cold, fix older than 120 s) → the node's fix goes, and the UI says `the node's own fix — your phone has no fix yet`. `will share` names the source *before* you press, like a message's airtime cost. A position never travels under a source nobody stated.
+3. **Two dots, two rings.** Your own fix draws in ink with a **solid** ring; the node's stays green and peers keep dashed rings, because your uncertainty is first-hand and current while theirs is as old as its age pill. Recentre and first-open prefer you, then fall back to the node. Distances in the people rows are now measured from *you* when the phone knows, and the row says when they aren't.
+
+**Surprised:** the honest-fallback wiring found a layout bug immediately. `InfoRow` puts label and value on one line, which is right for `battery 82%` and wrong for a sentence — "your phone's fix is 9893 s old" wrapped into its own label. Reasons are the content this UI exists to show, so they get a `ReasonRow` (label above, sentence below, full width) instead of being truncated. Also folded three copies of the same lifecycle helper into one `OnResumeEffect`: permissions, battery buckets *and* the location switch all change in Settings behind the app's back, and every screen that shows one has to re-read on resume.
+
+Uncertainty crosses the wire as HDOP×10 because that is what §4 carries, so the metres→HDOP inverse lives next to `accuracyMeters` as one convention rather than two rings that mean different things.
+
+**Verified on the emulator against the running mock:** permission dialog fires from the tap; `adb emu geo fix` → `±5 m · now · gps` and the coordinates match what was set; first share after granting correctly used the node's fix and said why; the next two sent the phone's; sharing twice without moving drew `0 m from your last shared position — decimating below 50 m`; moving 200 m was accepted. Your white dot with its ring is on the map, centred on it. Screenshots `02-live`, `03-map`, `07-link`, `10-setup-2` recaptured; four docs updated. `:app` compiles, 26 protocol tests still green.
+
+**Same session, two bugs the user hit:** the Chat tab crashing on every tap, and the 16 KB page-size problem.
+
+**Chat crashed because the node said everything twice.** `java.lang.IllegalArgumentException: Key "seq-1" was already used` from `LazyColumn`. The cause was not the list — on connect the node pushed the whole shared channel (`hub.since(0)`), *and* the client immediately stated its chat cursor (`resync()` on `hello`), which the node answered with the same history again. Two copies, same `seq`, same key. That is the §3 ownership rule broken in the node's favour: the client is authoritative about what it has received, so the node must answer rather than assume. Positions already worked this way; chat now does too, and the connect-time push is gone. On the client, a chat frame whose `seq` matches one we already hold now upgrades that row in place instead of appending — `seq` is the node's identity for a message, so two frames with one seq are one message.
+
+Separately, and regardless of the node: **list keys are now local and monotonic** (`rowId`, assigned on insert), because `msgId` is null for other people's messages and `seq` is the node's to assign — neither can be *guaranteed* unique, and a duplicate key does not render oddly, it takes the app down. A node that repeats itself must never be able to crash the client.
+
+**The 16 KB issue was real and only half-visible.** `zipalign -P 16 -c` passed, which is why it looks fixed and isn't: that checks where the `.so` sits *inside the APK*, not how the library itself was linked. Reading the ELF program headers showed `libmaplibre.so` 11.5.2 with LOAD `p_align 0x1000` — 4 KB — so on an Android 15+ 64-bit device (or the emulator's 16 KB image) the map's native library cannot load. MapLibre ships 16 KB-aligned from **11.8.8**; bumped to **11.11.0** and verified `0x4000` on both 64-bit ABIs. Added `packaging { jniLibs { useLegacyPackaging = false } }` so the zip side is explicit rather than an AGP default, and made the app **64-bit only** — 16 KB pages are a 64-bit feature, the 32-bit MapLibre libraries are still linked at 4 KB, and carrying ~20 MB that cannot run on either target device only muddies the check. Verified on the emulator: map renders on 11.11.0, no `UnsatisfiedLinkError`, chat opens and backfills exactly once after a restart.
+
+Neither fix has an automated test: the mock's 37 tests exercise the hub, relay and history modules, not the WebSocket connect path where the double-push lived. Worth a socket-level test the day the same class of bug reappears.
+
+**Next:** Room for the track (the cursor survives a restart, the history does not), then two clients side by side with one deliberately flooding. `Setup`/`PhoneLocation` still have no automated test — same gap as onboarding, same intended home (Robolectric or the Journeys harness, §6). No hardware; silkscreen band check still open, still not blocking.
+
 ## 2026-07-25 (late, cont.) — licensed, and two things a public repo should not carry
 
 **Tried:** made the repo properly open source and stripped what was left of the wish-listing.
