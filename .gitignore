@@ -1,21 +1,56 @@
-# ESP-IDF
+# Lokalgrid — repo-wide ignores.
+# Module-scoped rules live in android/.gitignore and mock-node/.gitignore.
+# Rule of thumb for this repo: commit the broken state (BUILDLOG), never the
+# generated one. If a generated file is worth keeping as a fixture, `git add -f`
+# it deliberately — the golden vectors are the one example so far.
+
+# --- Build output, any language -----------------------------------------
 build/
-sdkconfig
+dist/
+out/
+*.log
+
+# --- Firmware: ESP-IDF ---------------------------------------------------
+sdkconfig            # generated from sdkconfig.defaults, which IS committed
 sdkconfig.old
 managed_components/
 dependencies.lock
-*.bin
-*.elf
-*.map
+firmware/**/*.bin    # scoped: a .bin elsewhere may be a codec fixture worth keeping
+firmware/**/*.elf
+firmware/**/*.map
 
-# Web client
+# --- Android -------------------------------------------------------------
+# (android/.gitignore holds the rest; these are the ones that must never leak)
+local.properties     # points at a machine-specific SDK path
+*.apk
+*.aab
+*.keystore
+*.jks
+key.properties
+
+# --- Node (mock-node, and any JVM/JS tooling) ----------------------------
 node_modules/
-dist/
+npm-debug.log*
+coverage/
 .vite/
 
-# Claude Code
+# --- Editors -------------------------------------------------------------
+# IntelliJ project metadata is machine-local here and has caused real damage:
+# the IDE rewrote workspace.xml into a renamed-away path (BUILDLOG 2026-07-20).
+.idea/
+*.iml
+
+# --- Secrets and scratch -------------------------------------------------
+.env
+.env.*
+scratch/
+tmp/
+
+# --- Claude Code ---------------------------------------------------------
 CLAUDE.local.md
 .claude/settings.local.json
+# .claude/skills/ is committed on purpose — /build-log is part of the project.
 
-# macOS
+# --- macOS ---------------------------------------------------------------
 .DS_Store
+._*

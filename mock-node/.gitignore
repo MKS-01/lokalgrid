@@ -1,2 +1,6 @@
 node_modules/
+
+# Captured/replay sessions are large and machine-local. A replay file worth
+# keeping as a deterministic fixture goes in with `git add -f`.
 *.ndjson
+captures/
