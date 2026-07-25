@@ -121,12 +121,16 @@ pre u{color:#E5A85C;text-decoration:none}
 .pill.l{background:var(--lora-bg);color:var(--lora)}
   background-image:linear-gradient(var(--rule-2) 1px,transparent 1px),linear-gradient(90deg,var(--rule-2) 1px,transparent 1px);background-size:16px 16px}
 
-.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:22px 20px;margin:16px 0 24px}
+.shots{display:flex;gap:16px;overflow-x:auto;margin:16px 0 8px;padding-bottom:12px;
+  scroll-snap-type:x proximity;scrollbar-color:var(--rule) transparent}
+.shots::-webkit-scrollbar{height:8px}
+.shots::-webkit-scrollbar-thumb{background:var(--rule);border-radius:4px}
+.shot{flex:0 0 208px;scroll-snap-align:start}
 .shot figure{margin:0}
 .shot a{display:block;border:1px solid var(--rule);border-radius:4px;overflow:hidden;background:var(--deep)}
 .shot a:hover{border-color:var(--lock)}
 .shot img{width:100%;display:block}
-.shot figcaption{font-family:var(--mono);font-size:10.5px;line-height:1.65;color:var(--ink-3);margin-top:8px}
+.shot figcaption{font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--ink-3);margin-top:8px}
 .shot figcaption b{color:var(--ink-2);font-weight:600;display:block;margin-bottom:2px}
 
 
@@ -391,7 +395,7 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y</pre>
     </table></div>
 
     <h2>Screens</h2>
-    <p class="caption">Captured from the running app against the mock node. Five flat tabs; Link opens from the status bar and Diagnostics from a long-press on the title — neither is a sixth tab.</p>
+    <p class="caption">Captured from the running app against the mock node — scroll sideways for all twelve, click any for full size. Five flat tabs; Link opens from the status bar and Diagnostics from a long-press on the title, so neither is a sixth tab.</p>
 <div class="shots">
       <div class="shot"><figure><a href="docs/screens/01-boot.png" target="_blank" rel="noopener"><img src="docs/screens/01-boot.png" alt="Boot screen naming the node"></a><figcaption><b>boot</b>Holds until the first connection attempt resolves (1200 ms cap), naming the node it is opening. Not a timed logo.</figcaption></figure></div>
       <div class="shot"><figure><a href="docs/screens/02-live.png" target="_blank" rel="noopener"><img src="docs/screens/02-live.png" alt="Live tab"></a><figcaption><b>live</b>The fix with its HDOP accuracy, people on the node, node stats, cursor/history, and the three actions.</figcaption></figure></div>
