@@ -384,6 +384,8 @@ Google's agentic Android tools (`developer.android.com/tools/agents`) are the te
 
 Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
+> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §07, alongside the original wireframes and a table of where the build diverged from them. Captured 2026-07-25, Phase 02 against the mock.
+
 ### UI rules
 
 - Five tabs, flat: **Live · Map · Chat · Clients · Config**. Diagnostics via long-press on the title, not a sixth tab.

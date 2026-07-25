@@ -14,6 +14,10 @@ Verified on the emulator against the live mock, not just in tests: killed the ap
 
 **Also:** the root README was still a one-line stub from the rename. It is now the actual front page — what the thing is, what works today, how to run it, the layout, the wire format, the two hardware rules, and the callsign convention.
 
+**Screenshots, and the wireframes reconciled with reality.** Captured all twelve screens off the emulator (`adb exec-out screencap`, IME disabled so the emulator's floating keyboard stopped covering the Chat tab), downscaled to 540 px — 484 KB for the set — and committed to `docs/screens/`. The master plan's §07 now leads with **Built — the app as it runs today**, keeps the hand-built wireframes underneath as the original design intent, and adds a table of where the two diverged: the Link screen and the setup flow did not exist in the wireframes; chat split one "queued 40 s" row into delivery *and* relay because conflating them lied about local delivery; queue reasons gained the constraint that causes them; Live and Link gained cursor/log-range/gap rows because backlog resume has to be checkable; the map gained basemap chips and the track line. Section renamed Wireframes → Screens, since it is now both.
+
+Worth keeping: the wireframes were right about almost everything structural — five flat tabs, diagnostics behind a long-press, uncertainty rendered everywhere, queue state as a reason. What they missed was entirely *connection* surface: nothing in them covered permissions, battery exemption, which node to talk to, or resume state. That is the part you cannot design without having run the thing on a phone.
+
 **Next:** the phone's own GPS behind "share my position" (it still offers the node's fix), Room for the track itself (the cursor persists, the history does not), then two clients side by side with one deliberately flooding. 37 mock tests, 26 Kotlin. No hardware; silkscreen band check still open, still not blocking.
 
 ## 2026-07-25 — the forward flow: chat, and the airtime queue made visible

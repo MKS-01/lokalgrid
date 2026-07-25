@@ -34,7 +34,17 @@ Phase 03. Everything except the BLE GATT path can be developed with no hardware.
 Clients · Config), a live dot with its accuracy ring on a MapLibre map, one
 shared chat channel with lane-0 emergency, position sharing with distance
 decimation, roster and rename, node-computed airtime meters, staged-then-explicit
-config writes, and a first-run flow (permissions · battery · node URL).
+config writes, per-client cursors with backlog resume, a Link screen, and a
+first-run flow (permissions · battery · node URL).
+
+| | | | |
+|---|---|---|---|
+| <img src="docs/screens/02-live.png" width="180"> | <img src="docs/screens/03-map.png" width="180"> | <img src="docs/screens/04-chat.png" width="180"> | <img src="docs/screens/07-link.png" width="180"> |
+| **Live** — fix, uncertainty, people, cursor | **Map** — everyone, each with its ring and age | **Chat** — delivered *and* the link-out queue reason | **Link** — permissions · wifi · ble · session |
+
+All twelve screens, and what changed between wireframe and build, are in
+[§07 of the master plan](lokalgrid-master-plan.html) · raw files in
+[`docs/screens/`](docs/screens).
 
 ## Run it
 

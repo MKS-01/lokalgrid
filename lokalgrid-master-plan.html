@@ -173,7 +173,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <a href="#firmware">04 Firmware</a>
   <a href="#protocol">05 Protocol</a>
   <a href="#software">06 Software</a>
-  <a href="#wireframes">07 Wireframes</a>
+  <a href="#wireframes">07 Screens</a>
   <a href="#android">08 Clients</a>
   <a href="#cli">09 CLI</a>
   <a href="#testing">10 Testing</a>
@@ -729,9 +729,48 @@ epoch      u32     flags   u16     battery u8   hdop u8
 
 <!-- ============ 07 WIREFRAMES ============ -->
 <section id="wireframes">
-  <div class="rail"><span class="no">07</span>Wireframes<p>Six screens, one bottom navigation bar. Anything that doesn't fit here doesn't ship in v1.</p></div>
+  <div class="rail"><span class="no">07</span>Screens<p>The app as built, then the wireframes it was built from. Five tabs, one bottom bar; anything that doesn't fit doesn't ship in v1.</p></div>
   <div class="body">
-    <h2>App wireframes</h2>
+    <h2>Built &mdash; the app as it runs today</h2>
+    <p class="note"><b>Screenshots, 2026-07-25.</b> Captured from the Compose app running against the mock node (Phase 02) on an emulator. Everything shown is real: live records over the WebSocket, node-assigned chat sequence numbers, node-computed airtime meters, cursors and backlog resume. The only synthetic parts are the track itself and the two <em>ghost</em> peers, which the UI labels as such. The hand-built wireframes below are kept as the original design intent &mdash; where the two differ, the table says why.</p>
+
+    <style>
+      .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px;margin:22px 0}
+      .shot figure{margin:0}
+      .shot img{width:100%;border:1px solid #33403c;border-radius:4px;display:block}
+      .shot figcaption{font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#7c8b85;margin-top:7px}
+      .shot figcaption b{color:#a9b8b2;font-weight:600;display:block;margin-bottom:2px}
+    </style>
+
+    <div class="shots">
+      <div class="shot"><figure><img src="docs/screens/01-boot.png" alt="Boot screen naming the node"><figcaption><b>boot</b>Holds until the first connection attempt resolves (1200 ms cap), naming the node it is opening. Not a timed logo.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/02-live.png" alt="Live tab"><figcaption><b>live</b>The fix with its HDOP accuracy, people on the node, node stats, cursor/history, and the three actions.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/03-map.png" alt="Map tab"><figcaption><b>map</b>Your dot inside its accuracy ring, peers with age and staleness colour, the resumed track as a line.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/04-chat.png" alt="Chat tab"><figcaption><b>chat</b>Two truths per message: <em>relayed</em> / <em>seq 2</em> for what the node has, and the link-out queue reason underneath &mdash; &ldquo;queued 60 s &mdash; radio duty-cycled&rdquo;.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/05-clients.png" alt="Clients tab"><figcaption><b>clients</b>Roster and per-client airtime, node-computed. Ghosts labelled. Duty cycle used: 0.78% of the 1.0% ceiling.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/06-config.png" alt="Config tab"><figcaption><b>config</b>This phone&rsquo;s setup above, the node&rsquo;s config below. Edits stage locally and write explicitly; locked keys carry the reason they are not settings.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/07-link.png" alt="Link screen"><figcaption><b>link</b>Not in the original wireframes. Tap the status bar: permissions &middot; wifi &middot; ble &middot; session, as an ordered flow. Never a gate &mdash; the tab bar stays live.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/08-diagnostics.png" alt="Diagnostics overlay"><figcaption><b>diagnostics</b>Long-press the app bar title, as specified. Cursor, backlog, dropped frames, flags.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/09-setup-1.png" alt="Setup step 1"><figcaption><b>setup 1/4</b>What this is. First run only, re-enterable from Config.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/10-setup-2.png" alt="Setup step 2, permissions"><figcaption><b>setup 2/4</b>Bluetooth and notifications, each with its reason &mdash; plus an explicit <em>not asked for: location &mdash; never</em>.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/11-setup-3.png" alt="Setup step 3, battery"><figcaption><b>setup 3/4</b>The One UI deep-sleep trap. Detects the exemption, opens the right settings screen, and admits the app can only notice it.</figcaption></figure></div>
+      <div class="shot"><figure><img src="docs/screens/12-setup-4.png" alt="Setup step 4, node URL"><figcaption><b>setup 4/4</b>Which node to talk to, persisted. Retires the 10.0.2.2-on-a-real-phone dead end.</figcaption></figure></div>
+    </div>
+
+    <h2>Where the build diverged from the wireframes</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Change</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><b>A Link screen was added</b>, opened from the status bar</td><td>Connection state was scattered across Config and the app bar. It is a flow, not a tab &mdash; the five-tab rule holds &mdash; and it deliberately does not gate the app, because the client can resume from its cursor whenever the link returns.</td></tr>
+        <tr><td><b>A four-step first-run setup was added</b></td><td>Section 08 called the onboarding screen &ldquo;not optional&rdquo;, but no wireframe existed for it. Permissions, the battery trap and the node URL each needed a surface.</td></tr>
+        <tr><td><b>Chat shows delivery and relay separately</b></td><td>The wireframe&rsquo;s single &ldquo;queued 40 s&rdquo; implied every message waits on airtime. Phones on the same node exchange chat instantly over WiFi/BLE; only the LoRa relay is duty-cycled. Conflating them would have been a lie about local delivery.</td></tr>
+        <tr><td><b>Queue reasons name the constraint</b></td><td>&ldquo;queued 60 s&rdquo; on its own is a spinner with a number on it. Reasons now say <em>radio duty-cycled</em>, or name who is ahead of you.</td></tr>
+        <tr><td><b>Live and Link show cursor, log range and gaps</b></td><td>Backlog resume has to be checkable. A stretch where records aged out is stated as a gap, never drawn through as continuous track.</td></tr>
+        <tr><td><b>Map gained basemap chips and a track line</b></td><td>The line is what makes a resumed backlog visible instead of a counter you have to trust. Basemaps are keyless rasters until the offline PMTiles work lands.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>App wireframes &mdash; the original design intent</h2>
     <div class="screens">
 
       <div class="dev">
