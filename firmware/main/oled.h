@@ -17,8 +17,14 @@ bool oled_init(uint8_t i2c_port);
 bool oled_present(void);
 
 /** Replace the whole screen with six lines of text, top to bottom. NULL or a
- *  short array is fine; missing lines are left blank. 21 characters fit. */
+ *  short array is fine; missing lines are left blank. 21 characters fit.
+ *  Line 0 is drawn as an inverted header bar. */
 void oled_lines(const char *const *lines, uint8_t count);
+
+/** As above, with one short string right-aligned in the header bar — the single
+ *  figure worth reading from across a table. Dropped rather than overlapped if
+ *  the title leaves no room for it. */
+void oled_lines_badge(const char *const *lines, uint8_t count, const char *badge);
 
 /** The boot page, drawn before the network is up so the screen is never blank
  *  while something is still happening. */

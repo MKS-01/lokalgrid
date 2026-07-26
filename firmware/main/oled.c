@@ -99,16 +99,32 @@ static void flush(void)
     }
 }
 
-static void draw_text(uint8_t page, const char *s)
+static void draw_at(uint8_t page, uint8_t x, const char *s)
 {
     if (page >= OLED_PAGES) return;
-    uint8_t x = 0;
     for (; *s && x + GLYPH_W <= OLED_W; s++, x += GLYPH_W) {
         unsigned char c = (unsigned char)*s;
         if (c < 0x20 || c > 0x7e) c = '?';
         memcpy(&s_fb[page][x], FONT[c - 0x20], 5);
         s_fb[page][x + 5] = 0x00;
     }
+}
+
+static void draw_text(uint8_t page, const char *s)
+{
+    draw_at(page, 0, s);
+}
+
+/* Right-aligned, for the one number that belongs at the far edge. Anything that
+ * would collide with the left-hand text is drawn from column 0 instead — an
+ * overlap is unreadable, and a badge shoved left is merely ugly. */
+static void draw_right(uint8_t page, const char *s, uint8_t left_used)
+{
+    size_t n = strlen(s);
+    if (n == 0 || n > LINE_CHARS) return;
+    uint8_t x = (uint8_t)(OLED_W - n * GLYPH_W);
+    if (x < left_used + GLYPH_W) x = left_used + GLYPH_W;
+    draw_at(page, x, s);
 }
 
 bool oled_init(uint8_t i2c_port)
@@ -179,17 +195,33 @@ bool oled_present(void)
 
 void oled_lines(const char *const *lines, uint8_t count)
 {
+    oled_lines_badge(lines, count, NULL);
+}
+
+void oled_lines_badge(const char *const *lines, uint8_t count, const char *badge)
+{
     if (s_dev == NULL) return;
     memset(s_fb, 0, sizeof(s_fb));
     /* Six lines on eight pages: the text sits on every page except the two the
-     * layout leaves as breathing room (a title rule under line 0). */
+     * layout leaves as breathing room (the gap under the header). */
     static const uint8_t page_of[6] = { 0, 2, 3, 4, 5, 7 };
     for (uint8_t i = 0; i < count && i < 6; i++) {
         if (lines[i]) draw_text(page_of[i], lines[i]);
     }
-    /* The rule under the title, so the name reads as a heading rather than as
-     * one more status line. */
-    memset(&s_fb[1][0], 0x08, OLED_W);
+
+    /* The badge is the one number you should be able to read across a table
+     * without reading the rest: how many phones are attached. It sits at the far
+     * right of the header. */
+    if (badge && count > 0 && lines[0]) {
+        draw_right(0, badge, (uint8_t)(strlen(lines[0]) * GLYPH_W));
+    }
+
+    /* A solid header bar with the text knocked out of it, rather than a hairline
+     * rule under the name. On a 128x64 panel read at arm's length the bar is what
+     * separates "the node" from "what the node is doing" at a glance; a 1 px rule
+     * disappears at that distance. Inverting the whole page costs one XOR. */
+    for (uint8_t x = 0; x < OLED_W; x++) s_fb[0][x] ^= 0xff;
+
     flush();
 }
 

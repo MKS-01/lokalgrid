@@ -14,6 +14,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,6 +26,7 @@
 
 #include "axp2101.h"
 #include "ble_adv.h"
+#include "ble_gatt.h"
 #include "board.h"
 #include "board_pins.h"
 #include "gnss.h"
@@ -174,37 +176,76 @@ void app_main(void)
          * no phone attached. Named states, no spinner — the §6 rule applies to
          * the device's own display too.
          *
-         * Battery is deliberately absent: the AXP2101 has not been read yet, and
-         * a made-up percentage is worse than none. It appears when the PMU does. */
-        /* 22 = 21 characters on a line plus the terminator; the compiler checks
-         * these against the format strings, so the sizes are not decoration. */
-        char l_wifi[32], l_ssid[32], l_ble[32], l_up[32];
+         * One line per thing you might want to know, each labelled in the same
+         * six-column gutter so the values line up and the screen can be read by
+         * shape before it is read by word. 21 characters fit, and every line
+         * below is written to stay inside that; the compiler checks the buffer
+         * sizes against the format strings, so they are not decoration.
+         *
+         * The line that used to say `ws  N clients` is gone: a client is a client
+         * whichever wire it arrived on (§2), so the count belongs in the header
+         * once, and the wifi and ble lines say how each wire is doing. */
+        char l_ssid[32], l_wifi[32], l_ble[32], l_gnss[32], l_pwr_up[32];
+
         snprintf(l_ssid, sizeof(l_ssid), "ssid  %s", LG_AP_SSID);
+
         if (wifi_ap_is_up()) {
             snprintf(l_wifi, sizeof(l_wifi), "wifi  up, %u phone%s", stations,
                      stations == 1 ? "" : "s");
         } else {
             snprintf(l_wifi, sizeof(l_wifi), "wifi  down, idle");
         }
-        snprintf(l_ble, sizeof(l_ble), "ble   %s",
-                 ble_adv_is_advertising() ? "advertising" : "quiet");
+
+        const uint8_t ble_n = ble_gatt_clients();
+        if (!ble_adv_is_advertising() && ble_n == 0) {
+            snprintf(l_ble, sizeof(l_ble), "ble   quiet");
+        } else if (ble_n > 0) {
+            snprintf(l_ble, sizeof(l_ble), "ble   %u client%s %uB", ble_n,
+                     ble_n == 1 ? "" : "s", ble_gatt_mtu());
+        } else {
+            snprintf(l_ble, sizeof(l_ble), "ble   advertising");
+        }
+
+        /* The GNSS line carries its uncertainty, like every other position this
+         * project renders (§6): satellites and HDOP when there is a fix, the age
+         * when there was one and it has gone, and "searching" with the sentence
+         * count when the receiver is talking but has nothing yet. A bare "fix"
+         * would be the crisp-dot mistake in six characters. */
         uint32_t nmea = 0, fixes = 0;
         gnss_counters(&nmea, &fixes);
-        snprintf(l_up, sizeof(l_up), "up %lum  gnss %s",
-                 (unsigned long)(up_s / 60),
-                 net_ws_gnss_live() ? "fix" : (nmea > 0 ? "no fix" : "--"));
-
-        char l_ws[32];
-        snprintf(l_ws, sizeof(l_ws), "ws    %u client%s %s", net_ws_clients(),
-                 net_ws_clients() == 1 ? "" : "s", net_ws_gnss_live() ? "" : "synth");
+        lg_fix_t fx;
+        gnss_get(&fx);
+        const int32_t age = gnss_age_s();
+        if (gnss_fresh() && fx.valid) {
+            snprintf(l_gnss, sizeof(l_gnss), "gnss  %usv h%u.%u %s", fx.sats,
+                     fx.hdop_x10 / 10, fx.hdop_x10 % 10, fx.fix_3d ? "3d" : "2d");
+        } else if (age >= 0) {
+            snprintf(l_gnss, sizeof(l_gnss), "gnss  stale, %lds old", (long)age);
+        } else if (nmea > 0) {
+            snprintf(l_gnss, sizeof(l_gnss), "gnss  searching, %lu", (unsigned long)nmea);
+        } else {
+            snprintf(l_gnss, sizeof(l_gnss), "gnss  no receiver");
+        }
 
         /* Power is a *source*, not a percentage: this node runs from USB, so a
-         * battery figure would be invented. The line says which it is. */
+         * battery figure would be invented. The label says which it is; uptime
+         * shares the line because neither needs a whole one. */
         char l_pwr[32];
         axp_power_label(&pmu, l_pwr, sizeof(l_pwr));
+        const char *pwr = strncmp(l_pwr, "power ", 6) == 0 ? l_pwr + 6 : l_pwr;
+        /* Both bounded on purpose: the line is 21 characters, and a node left on
+         * for a week would otherwise push the power source off the screen. */
+        snprintf(l_pwr_up, sizeof(l_pwr_up), "%.12s  up %um", pwr,
+                 (unsigned)((up_s / 60) % 10000));
 
-        const char *lines[] = { "lokalgrid", l_wifi, l_ble, l_ws, l_pwr, l_up };
-        oled_lines(lines, 6);
+        /* The badge: the one figure worth reading from across a table. Clients
+         * across *all* transports against the cap, so it agrees with the roster
+         * rather than counting one wire. */
+        char badge[8];
+        snprintf(badge, sizeof(badge), "%u/9", lg_session_clients());
+
+        const char *lines[] = { "lokalgrid", l_ssid, l_wifi, l_ble, l_gnss, l_pwr_up };
+        oled_lines_badge(lines, 6, badge);
 
         vTaskDelay(pdMS_TO_TICKS(5000));
         up_s += 5;
