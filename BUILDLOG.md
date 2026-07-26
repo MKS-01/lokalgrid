@@ -32,6 +32,12 @@ Also settled: with ALDO4 on and both buses re-scanned, the **QMI8658 still does 
 
 **The C codec earns its keep:** `record.c` reproduces all five golden vectors byte for byte, checked by `firmware/test/run.sh`, which builds it for the host with `cc` — no ESP-IDF, no board. Three hand-written implementations of one format now agree, so the Phase 05 drift bug still has not happened, which is correct.
 
+**Same session, two bugs from the first real test.**
+
+**Chat was never acknowledged, and the cause was in the transport, not the chat.** `net_ws.c` mapped socket fd to client id with an array indexed by fd — but ESP-IDF puts LWIP sockets at the top of the descriptor space (`LWIP_SOCKET_OFFSET = FD_SETSIZE − CONFIG_LWIP_MAX_SOCKETS`), so they arrive numbered around 48–63 against a 16-entry table. Nothing matched, and **every frame a client sent was dropped silently**. What made it hard to see is that it only broke one direction: `hello`, roster, config and the whole position stream go *out* at join and never touch the map, so the node looked alive and the dot moved, while chat, rename, config writes, position sharing and the cursor/backlog request all went *in* and vanished. Now a small table of `(fd, id)` pairs, and a frame arriving on an unmapped socket logs a warning **with the body** rather than disappearing.
+
+**The node's position froze instead of going stale.** `gnss_to_record()` returned early when the fix was invalid, so a receiver that lost its satellites made the node log nothing at all while still reporting `mode: gnss` — the stream stopped and the dot sat still with no explanation. Re-logging the last position each second would have been worse: sequence numbers climbing while the dot stands still reads as a live, stationary node. So only a **fresh** fix (≤ 3 s) becomes a record, a stale one logs a throttled reason, and `stats` now carries `gnssSource`, `gnssAgeS`, `gnssSats` and `gnssHdop` so the app can say `live · 5 sv · hdop 1.4` or `12s old · 3 sv` — because a node standing still and a node that has stopped seeing satellites are indistinguishable from the dot alone, and only one of them is fine.
+
 **Next:** verify the app's BLE path against the node (the firmware half is running and untested from the phone), a breakpoint in `app_main` over USB-JTAG, read the BME280 so `baro`/`tmp` stop being sentinels, then Room for the track and the two-client flood test.
 
 ## 2026-07-26 (night) — it boots, and the screen says something

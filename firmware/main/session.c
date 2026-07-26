@@ -234,6 +234,21 @@ static void send_config(client_t *c)
     send_text_c(c, buf);
 }
 
+/* The node's own last-known satellite count and HDOP, for the stats frame. */
+static uint8_t node_sats(void)
+{
+    lg_fix_t f;
+    gnss_get(&f);
+    return f.sats;
+}
+
+static uint8_t node_hdop(void)
+{
+    lg_fix_t f;
+    gnss_get(&f);
+    return f.hdop_x10;
+}
+
 static void send_stats(client_t *only)
 {
     char buf[256 + MAX_CLIENTS * 96];
@@ -242,9 +257,15 @@ static void send_stats(client_t *only)
     int n = snprintf(buf, sizeof(buf),
         "{\"type\":\"stats\",\"uptimeS\":%lu,\"queueDepth\":0,\"airtimeMs\":0,"
         "\"dutyActualPct\":0.0,\"dutyUsedPct\":0.0,"
-        "\"posOldest\":%lu,\"posNewest\":%lu,\"posHeld\":%lu,\"clients\":[",
+        "\"posOldest\":%lu,\"posNewest\":%lu,\"posHeld\":%lu,"
+        /* The node's own fix, so a client can tell a stationary node from a node
+         * that has stopped seeing satellites. Without this the two look alike. */
+        "\"gnssSource\":\"%s\",\"gnssAgeS\":%ld,\"gnssSats\":%u,\"gnssHdop\":%u,"
+        "\"clients\":[",
         (unsigned long)uptime_s(), (unsigned long)pos_oldest(),
-        (unsigned long)s_pos_newest, (unsigned long)s_pos_count);
+        (unsigned long)s_pos_newest, (unsigned long)s_pos_count,
+        s_gnss_live ? "gnss" : "synthetic", (long)gnss_age_s(),
+        node_sats(), node_hdop());
     bool first = true;
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (!s_clients[i].used) continue;
@@ -844,7 +865,23 @@ static void gnss_to_record(void)
 {
     lg_fix_t f;
     gnss_get(&f);
-    if (!f.valid) return;
+
+    /* Only a *fresh* fix becomes a record. A stale one must not be re-logged
+     * every second: the position would advance in sequence numbers while
+     * standing still on the map, which reads as a live node that is not moving
+     * rather than a node that has lost its fix. The staleness goes into `stats`
+     * instead, where the app can render it as an age. */
+    if (!gnss_fresh()) {
+        static int64_t complained_at = 0;
+        int64_t now = now_us();
+        if (now - complained_at > 15 * 1000000LL) {
+            complained_at = now;
+            ESP_LOGW(TAG, "gnss fix is %ld s old — logging nothing rather than "
+                          "repeating a position we can no longer see",
+                     (long)gnss_age_s());
+        }
+        return;
+    }
 
     lg_record_t r = {
         .epoch = f.epoch,

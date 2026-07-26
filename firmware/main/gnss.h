@@ -43,8 +43,19 @@ bool gnss_start(void);
 /** The most recent fix, or a zeroed struct with `valid == false`. */
 void gnss_get(lg_fix_t *out);
 
-/** True once a valid fix has been seen — what flips `hello.mode` to "gnss". */
+/** True once a valid fix has been seen — what flips `hello.mode` to "gnss".
+ *  It describes the *source*, not the moment: a receiver that had a fix and has
+ *  since lost one is still a GNSS-driven node, and the age below is how the
+ *  momentary truth gets told. */
 bool gnss_live(void);
+
+/** Seconds since the last valid fix, or -1 when there has never been one. */
+int32_t gnss_age_s(void);
+
+/** A fix new enough to log as current. Anything older is history, and logging it
+ *  every second as though it were now is precisely the lie this project refuses:
+ *  the dot would sit still and look live. */
+bool gnss_fresh(void);
 
 /** Sentences seen and sentences with a fix, for the display and diagnostics. */
 void gnss_counters(uint32_t *sentences, uint32_t *fixes);

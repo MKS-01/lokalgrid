@@ -97,7 +97,28 @@ fun LiveScreen(
         if (peers.isEmpty()) InfoRow("nobody else", "no peer has shared a position yet")
 
         SectionLabel("node")
-        InfoRow("battery", "${r.bat}%")
+        // The node's own fix, with its age. A node that is standing still and a
+        // node that has lost its satellites both leave the dot where it was —
+        // the only difference is this row, so it is not optional (§6).
+        state.stats?.let { st ->
+            val age = st.gnssAgeS
+            InfoRow("node fix") {
+                when {
+                    st.gnssSource != "gnss" -> Pill("synthetic track", PillKind.LORA)
+                    age < 0 -> Pill("no fix yet · ${st.gnssSats} sv", PillKind.WARN)
+                    age <= 3 -> Pill("live · ${st.gnssSats} sv · hdop %.1f".format(st.gnssHdop / 10.0), PillKind.OK)
+                    else -> Pill("${age}s old · ${st.gnssSats} sv", PillKind.WARN)
+                }
+            }
+            if (st.gnssSource == "gnss" && age > 3) {
+                ReasonRow(
+                    "why it stopped",
+                    "the node has not had a fix for ${age} s, so it is logging nothing rather " +
+                        "than repeating a position it can no longer see. Indoors that is normal.",
+                )
+            }
+        }
+        InfoRow("battery", if (r.bat > 0) "${r.bat}%" else "usb, no cell")
         InfoRow("charging", if (r.charging) "yes" else "no")
         InfoRow("last fix", "#${r.seqLo} · ${state.fixCount} received" + if (state.dropped > 0) " · ${state.dropped} dropped" else "")
         // Resume state. The cursor is ours to state, the log is the node's to own

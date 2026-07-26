@@ -25,18 +25,39 @@ static const char *TAG = "ws";
 static httpd_handle_t s_server = NULL;
 
 /* fd → session client id. The session does not care about sockets and httpd does
- * not care about clients, so the mapping lives here, where both are visible. */
-static int s_id_of_fd[CONFIG_LWIP_MAX_SOCKETS];
+ * not care about clients, so the mapping lives here, where both are visible.
+ *
+ * **A table of pairs, not an array indexed by fd.** LWIP puts its sockets at the
+ * top of the descriptor space — `LWIP_SOCKET_OFFSET = FD_SETSIZE -
+ * CONFIG_LWIP_MAX_SOCKETS`, so they arrive numbered 48 and up — and an array of
+ * MAX_SOCKETS entries indexed by fd therefore matched nothing at all. Every frame
+ * a client sent was silently dropped: chat never acknowledged, cursors never
+ * answered, while positions kept streaming *out* because that path never needed
+ * the map. A bug that only breaks one direction is a bug that looks like anything
+ * but its cause. */
+typedef struct { int fd; int id; } fd_map_t;
+static fd_map_t s_map[MAX_SOCKETS];
 
 static int id_of(int fd)
 {
-    if (fd < 0 || fd >= CONFIG_LWIP_MAX_SOCKETS) return -1;
-    return s_id_of_fd[fd] - 1;      /* stored +1 so 0 means "not a client" */
+    for (int i = 0; i < MAX_SOCKETS; i++) {
+        if (s_map[i].fd == fd) return s_map[i].id;
+    }
+    return -1;
 }
 
 static void set_id(int fd, int id)
 {
-    if (fd >= 0 && fd < CONFIG_LWIP_MAX_SOCKETS) s_id_of_fd[fd] = id + 1;
+    /* Replace an existing entry for this fd first: httpd reuses descriptors, and
+     * a stale pair would route a new client's frames to a departed one. */
+    for (int i = 0; i < MAX_SOCKETS; i++) {
+        if (s_map[i].fd == fd) { s_map[i].id = id; if (id < 0) s_map[i].fd = -1; return; }
+    }
+    if (id < 0) return;
+    for (int i = 0; i < MAX_SOCKETS; i++) {
+        if (s_map[i].fd < 0) { s_map[i].fd = fd; s_map[i].id = id; return; }
+    }
+    ESP_LOGE(TAG, "no room to map fd %d — its frames would be dropped", fd);
 }
 
 static esp_err_t tx_text(void *ctx, const char *text)
@@ -106,7 +127,16 @@ static esp_err_t ws_handler(httpd_req_t *req)
     frame.payload = body;
     err = httpd_ws_recv_frame(req, &frame, frame.len);
     if (err == ESP_OK) {
-        lg_session_frame(id_of(fd), (const char *)body);
+        int id = id_of(fd);
+        if (id < 0) {
+            /* Loudly, because the silent version of this cost an evening: a frame
+             * arriving on a socket with no client behind it means the mapping is
+             * wrong, not that the client said something uninteresting. */
+            ESP_LOGW(TAG, "frame on fd %d with no client attached — dropped: %.60s",
+                     fd, (const char *)body);
+        } else {
+            lg_session_frame(id, (const char *)body);
+        }
     }
     free(body);
     return err;
@@ -136,7 +166,7 @@ static void tick_task(void *arg)
 
 esp_err_t net_ws_start(void)
 {
-    for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) s_id_of_fd[i] = 0;
+    for (int i = 0; i < MAX_SOCKETS; i++) { s_map[i].fd = -1; s_map[i].id = -1; }
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.max_open_sockets = MAX_SOCKETS;

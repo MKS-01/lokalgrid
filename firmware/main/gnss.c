@@ -244,6 +244,23 @@ bool gnss_live(void)
     return s_live;
 }
 
+/* Three seconds: a 1 Hz receiver that has missed two updates has stopped
+ * telling us anything, and the difference between "here" and "was here three
+ * seconds ago" is small enough not to matter and large enough to notice. */
+#define FRESH_LIMIT_US (3 * 1000000LL)
+
+int32_t gnss_age_s(void)
+{
+    if (!s_fix.valid || s_fix.at_us == 0) return -1;
+    return (int32_t)((esp_timer_get_time() - s_fix.at_us) / 1000000);
+}
+
+bool gnss_fresh(void)
+{
+    return s_fix.valid && s_fix.at_us != 0 &&
+           (esp_timer_get_time() - s_fix.at_us) < FRESH_LIMIT_US;
+}
+
 void gnss_counters(uint32_t *sentences, uint32_t *fixes)
 {
     if (sentences) *sentences = s_sentences;

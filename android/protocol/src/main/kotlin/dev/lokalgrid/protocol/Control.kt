@@ -138,6 +138,16 @@ sealed interface NodeFrame {
         val posOldest: Long,
         val posNewest: Long,
         val posHeld: Int,
+        /**
+         * The node's *own* fix state. Without this, a node standing still and a
+         * node that has stopped seeing satellites look identical from here — the
+         * dot sits in the same place either way, and only one of them is fine.
+         * `gnssAgeS` is -1 when the node has never had a fix.
+         */
+        val gnssSource: String = "unknown",
+        val gnssAgeS: Long = -1,
+        val gnssSats: Int = 0,
+        val gnssHdop: Int = 0,
     ) : NodeFrame
 
     /** Admission control said no, with something worth showing. Never silent (§3). */
@@ -362,6 +372,10 @@ object Control {
             posOldest = o.lng("posOldest") ?: 0,
             posNewest = o.lng("posNewest") ?: 0,
             posHeld = o.int("posHeld") ?: 0,
+            gnssSource = o.str("gnssSource") ?: "unknown",
+            gnssAgeS = o.lng("gnssAgeS") ?: -1,
+            gnssSats = o.int("gnssSats") ?: 0,
+            gnssHdop = o.int("gnssHdop") ?: 0,
         )
 
         "rejected" -> NodeFrame.Rejected(
