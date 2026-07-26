@@ -28,9 +28,9 @@ The silkscreen reads **T-Beam S3-Core v3.0** — this is expected. The Supreme *
 |---|---|---|
 | MCU | ESP32-S3FN8, dual core, 8 MB flash, **8 MB quad PSRAM** *(not octal — verified 2026-07-26, see below)* | — |
 | LoRa | SX1262, **868/915 MHz** variant | SPI2 (dedicated) |
-| GNSS | L76K (some units ship u-blox MAX-M10S) | UART1 |
+| GNSS | L76K (some units ship u-blox MAX-M10S) | **UART1, rx 9 / tx 8, 9600 baud, behind ALDO4** |
 | PMU | AXP2101, with coulomb counter | **I²C1** (SDA 42, SCL 41) |
-| IMU | QMI8658 | *did not answer on either bus (2026-07-26)* |
+| IMU | QMI8658 — **not fitted on this unit** | *no answer on either bus with all rails on (2026-07-26)* |
 | Magnetometer | QMC6310 | I²C0 (SDA 17, SCL 18) |
 | Baro/temp/humidity | BME280 — **present on this unit** at 0x77 | I²C0 |
 | RTC | PCF8563 | **I²C1** |
@@ -58,7 +58,24 @@ Two claims in the table above were wrong, and both were found in the first five 
 - **PSRAM is quad, not octal.** `CONFIG_SPIRAM_MODE_OCT=y` produced `octal_psram: PSRAM ID read error: 0x00000000` and then `abort()`, in a boot loop. Quad mode initialises all 8 MB (`Adding pool of 8192K of PSRAM memory to heap allocator`). `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` is now set as well: PSRAM that does not answer must degrade to internal RAM with a warning, never take the node down.
 - **There are two I²C buses**, and the split is not the one assumed. `i2c0` (SDA 17, SCL 18) carries the OLED, BME280 and magnetometer; `i2c1` (SDA 42, SCL 41) carries the **AXP2101** and the **PCF8563**. The first scan of bus 0 alone found no PMU on a board that runs off a battery, which is what pointed at a second bus — this is the I²C scan doing the job it exists for.
 - **The QMI8658 answered on neither bus.** Either this variant omits it or it sits behind a PMU rail that is still off. Not concluded; the motion gate falls back to GNSS speed until the AXP2101 is driven and the scan is repeated.
-- The BME280 **is** fitted on this unit, so `baro` and `tmp` carry real values rather than sentinels.
+- The BME280 **is** fitted on this unit, so `baro` and `tmp` can carry real values rather than sentinels — it is not read yet, so they still write sentinels until it is.
+
+**The rail map, read before anything was written** (`0x90 = 0x17` at power-up):
+
+| Rail | Voltage | At power-up | What it is |
+|---|---|---|---|
+| ALDO1 | 1800 mV | on | — |
+| ALDO2 | 3300 mV | on | — |
+| ALDO3 | 3300 mV | on | — |
+| **ALDO4** | 3300 mV | **off** | **GNSS** — confirmed by switching it on and getting NMEA |
+| BLDO1 | 1800 mV | on | — |
+| BLDO2 | 3300 mV | off | unidentified; the SX1262 is the obvious candidate |
+| DLDO1 | 2300 mV | off | — |
+| DLDO2 | 3300 mV | off | — |
+
+A rail programmed to a sensible voltage and left switched off is the signature of a peripheral the factory firmware powers on demand. Enabling one is **one bit in `0x90` and no voltage register** — that is the whole safety argument, and it is why `axp_enable_rail()` cannot change a voltage even if asked. **The GNSS receiver was not dead, it was unpowered**, which is worth remembering: on this board a silent peripheral is a power question before it is a pin question.
+
+**Powered from USB, not a cell** *(2026-07-26)*: a Mac, a phone or a power bank. The PMU reports `no cell`, so there is no battery percentage to show and the power ladder (§2, Phase 06) has nothing to measure — both say so rather than inventing a number. It also means every GNSS start is a cold one, since nothing keeps the almanac alive when the cable comes out.
 
 ### What each peripheral is actually for *(2026-07-25)*
 
@@ -140,6 +157,9 @@ A second board is the cheapest way to double useful coverage, and it is what mak
 | **Chat = one shared channel, text only** *(2026-07-20, DM half superseded 2026-07-25)* | No DMs, no channels, no media at launch. One room mirrors the product (one node, one group in the field) and keeps Phase 03 small. Revisit only after Phase 03 is alive. |
 | **Product framing: a modern walkie-talkie** *(2026-07-25)* | Encrypted messaging for whoever is inside a building, or within radio range of the node. "Walkie-talkie" is the *metaphor* — group, range-bound, immediate, no dialling and no accounts — **not** voice: it stays text (media is still rejected). Range is enforced by physics rather than policy, which is the honest version of a geofence: if you can reach the node you are in the group, and if you walk out you are not. |
 | **Messages are encrypted end to end; the node relays ciphertext** *(2026-07-25)* | Per-pair keys from an X25519 exchange at pairing, confirmed by a short code **shown on the node's OLED** — authenticated pairing with no server and no shared secret typed twice. The node can schedule and queue a message from its length and addressee alone, so it never needs the body. **This does not reverse the rejected item below:** encrypting the *track log at rest* with an eFuse-burned key is still rejected. Message confidentiality in flight is a different threat model, and §3 already carried a per-client `key[32]` from pairing. Metadata — who talks to whom, when, how long — remains visible to the node, and the UI must not imply otherwise. |
+| **One session, many transports** *(2026-07-26)* | `proto 2` is identical over WiFi and BLE, so the protocol lives once in `firmware/main/session.c` behind a transport interface and each wire is a thin adapter (`net_ws.c`, `ble_gatt.c`). A copy per transport would guarantee they drift — the same bug this project already expects between C and Kotlin (§6), invited a third time on purpose. A client is a client whichever wire it arrived on: one roster, one cap of 9, and the roster names each client's transport. |
+| **The app is 64-bit only** *(2026-07-26)* | 16 KB page support is a 64-bit feature, and the 32-bit MapLibre libraries are still linked at 4 KB alignment. Carrying them means shipping ~20 MB that cannot run on either target device (a Galaxy S25, an arm64/x86_64 emulator) while muddying any alignment check. `abiFilters` is arm64-v8a + x86_64. |
+| **Two basemaps, and offline downloads are explicit** *(2026-07-26)* | Satellite and topo were there because they were free, not because the product needs them, and every style is another tile pyramid to fetch for offline use. Streets and Dark stay. The download is user-initiated, shows the tile count and rough size *before* it starts, and says to do it on a network with internet — a few hundred megabytes over someone's mobile data is not a decision the app gets to make. Node-served PMTiles (Phase 06b) is the better answer later. |
 | **Location permission is asked for at the tap, not at first run** *(2026-07-26, narrows the §5 "no location permission at all" note)* | The phone's own GNSS is now what "share my position" sends, so `ACCESS_FINE_LOCATION` (plus `COARSE`, because Android lets the user grant only that) is requested — but **only when the user taps share**, where the reason is on screen. This does not weaken `neverForLocation` on `BLUETOOTH_SCAN`: finding the node still never needs location, and the app never derives a position from a scan result. Refusing it leaves the app fully usable: the node's own fix goes instead and is **labelled as the node's**, so a position never travels under a source nobody stated. Background location is not requested — sharing happens with the app open, and the foreground service arrives with BLE. |
 | **Each user's messages live on their own device** *(2026-07-25, supersedes "no DMs")* | Durable history is a **Room (SQLite)** database on the phone; the node keeps only a short ring for backfill plus undelivered dead-drop traffic, and holds those as ciphertext it cannot read. This supersedes the "no DMs" half of the 2026-07-20 chat decision — addressed messages are the point of a walkie-talkie with named handsets — while the *shared channel* stays exactly one, text only. Rationale: the node is a relay you might leave behind, so the copy that matters belongs to the person who sent or received it. |
 | **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Shared field node stands: one node, multiple phones, everyone on one map. (The client later moved from PWA to native Android — see the superseding row above.) |
@@ -398,7 +418,9 @@ log or the basemap starts running out of room.
 ```
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      # default is 1; 9 is NimBLE's hard ceiling — the multi-client switch
 CONFIG_LWIP_DHCPS_MAX_STATION_NUM=10    # DHCP leases; the AP station cap itself is runtime, see below
-CONFIG_SPIRAM_MODE_OCT=y                # S3 module is octal PSRAM
+CONFIG_SPIRAM_MODE_QUAD=y               # quad on this module — octal aborts in a boot loop
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y         # absent PSRAM costs the backlog buffers, never the node
+CONFIG_LWIP_MAX_SOCKETS=16              # esp_http_server needs sockets-3 >= its own cap
 CONFIG_PM_ENABLE=y                      # dynamic frequency scaling
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     # biggest idle-power win
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
@@ -413,6 +435,28 @@ which is how it surfaced). The SoftAP station limit is a *runtime* field,
 `wifi_ap.c`. The Kconfig line that does matter is the DHCP server's lease table
 above: without it the tenth phone associates and then never gets an address,
 which looks like a broken node rather than a full one.
+
+### What the firmware actually is *(2026-07-26)*
+
+```
+firmware/main/
+  main.c          boot order, heartbeat, the status page
+  board_pins.h    pin map — both I²C buses and the GNSS UART, verified on this unit
+  board.c         sweeps both buses, names every address, reuses a live bus
+  axp2101.c       PMU: reads everything, and switches exactly one bit when asked
+  gnss.c          probes for the receiver, parses GGA/RMC/GSA into a fix
+  oled.c          SH1106/SSD1306, six lines of 5x7 text, hand-written
+  session.c       proto 2 — the whole protocol, once, transport-agnostic
+  net_ws.c        the WebSocket transport (esp_http_server)
+  ble_gatt.c      the BLE transport (NimBLE GATT + §4 chunk framing)
+  ble_adv.c       GAP: advertising, and the connection events GATT needs
+  record.c        the 32-byte codec, C half — host-testable
+firmware/test/     builds record.c for the host, checks it against the golden vectors
+```
+
+The BLE service is `6f6b616c-6772-6964-0000-000000000001`, with `…0002` for
+control frames (write + notify) and `…0003` for records (notify). Written
+byte-reversed in the firmware because NimBLE takes them little-endian.
 
 ### Debugging — set this up in Phase 01
 
@@ -553,7 +597,10 @@ Minimal Android app: connect to the mock's WebSocket, NMEA/records → **MapLibr
 ### Phase 02 — App against the mock: three phones, shared state · *two weekends*
 Per-client cursors, message history, chat (one channel, text only), everyone seeing everyone — all driven by the mock replaying multiple clients. The multi-client *logic* (cursors, admission reasons, even a first cut of the scheduler) is built and flood-tested here, against fake data, before any silicon. Demoable, but not yet the *complete* thing — that needs the real node.
 
-### Phase 03 — Hardware: real node, BLE for real · *two weekends*
+### Phase 03 — Hardware: real node, BLE for real · *two weekends* — **substantially done (2026-07-26)**
+
+Done: toolchain, first flash, both I²C buses inventoried, PMU read, the GNSS rail identified and switched on, **real GNSS fixes** parsed into 32-byte records, LittleFS, SoftAP, BLE advertising **with a GATT service**, `proto 2` served over both transports, and the OLED showing status with no phone attached. Outstanding: a breakpoint in `app_main` over USB-JTAG, the app's BLE path verified against the node, and the BME280 read.
+
 Now the board comes out. ESP-IDF toolchain up, **USB-JTAG debugger working with a real breakpoint**, LittleFS mounted, SoftAP with a fixed SSID + BLE advertising — the phone sees `lokalgrid` in its WiFi list and in nRF Connect. Then the two swaps the mock couldn't give you: **point the app's WebSocket at the real SoftAP**, and **build the BLE GATT path against the real board** (§6: BLE cannot be mocked). The app you already have lights up on real hardware serving real fixes.
 One cheap addition while the board is on the bench: **the OLED shows something real** — SSID, client count, fix state, battery. Two hours of work, and it is the difference between a dev board with a blinking LED and a device you can put on a table and read.
 **⚑ NATURAL STOPPING POINT.** Three phones on a shared map, served by the real T-Beam. This is a complete project. Stopping here is success.
@@ -614,29 +661,33 @@ node bench --duration 60s
 | Stale BLE bonds | Connection failures that look exactly like firmware bugs | Do not bond during development |
 | Geofence jitter | Hundreds of events overnight from a parked node | Streak counter (3 fixes) + 30 m dead band |
 | Node pushes history *and* answers the cursor | Every backfilled message arrives twice; a `LazyColumn` keyed on the node's id crashes outright | One source of backfill: the client states its cursor, the node answers. Never both (§3). Row keys are local and monotonic, so a repeating node renders oddly instead of killing the app. |
+| A rail programmed but switched off | A peripheral that looks dead on correct pins — indistinguishable from a wiring error | Read the PMU's enable register before suspecting anything else. On this board ALDO4 (GNSS) powers up off, so the receiver is silent until it is switched on. |
+| Creating an I²C bus twice | `ESP_ERR_INVALID_STATE` *and* the existing handle stops working, so an unrelated device (the display) goes dead | `board_scan_i2c()` reuses a bus that is already up. Re-scanning after switching a rail is a normal thing to want. |
+| BLE advertisement over 31 bytes | NimBLE returns a bare `rejected: 4` and the node never advertises at all | Flags + name + tx power + a 128-bit UUID is 35 bytes. The service UUID goes in the **scan response**; Android merges it into the same `ScanRecord`, so service filtering still works. |
+| 128-bit UUID byte order | The app filters for a service the node is advertising and never finds it, with no error anywhere | `BLE_UUID128_INIT` takes the sixteen bytes **little-endian** — the printed string reversed. Both sides carry the value with the order documented. |
+| `httpd` socket ceiling | `httpd_start` returns `ESP_ERR_INVALID_ARG` and nothing explains it | `max_open_sockets` must be ≤ `CONFIG_LWIP_MAX_SOCKETS` − 3. The default ceiling of 10 caps the server at 7, below the 9-client cap; LWIP is at 16. |
+| A socket that never retries | The app looks connected-in-progress forever and only a restart fixes it — fatal for a node you walk up to | The event flow **ends** on failure, the caller retries with bounded backoff, and a WiFi change forces an immediate attempt. Joining the node's AP after launch is the normal case, not the exception. |
 | 16 KB page sizes | A prebuilt `.so` linked at 4 KB fails to load on Android 15+ 64-bit devices — the map dies, not the code that called it | Two checks, both needed: APK entries 16 KB-zipaligned (AGP 8.7 + `useLegacyPackaging = false`), and every shipped `.so` linked with `p_align ≥ 0x4000` — read it out of the ELF headers rather than trusting `zipalign -c`, which only inspects the zip. MapLibre is 16 KB-aligned from **11.8.8**; the app is 64-bit only. |
 
 ---
 
 ## 9. Resume here
 
-**No blockers.** The LoRa band question is closed — 868, constrained to 865–867 (section 1, 2026-07-26). **Phase 03 has started:** the board is in hand and ESP-IDF v5.3.1 is being installed under `Desktop/C0D3/esp-idf` (the toolchain too, via `IDF_TOOLS_PATH`, so nothing lands in the home directory).
+**No blockers.** The band is settled (868, kept inside 865–867). The board runs the firmware in this repo and serves the app.
 
-**Next action:** finish Phase 02 against the mock. Phase 00 is done (mock node, `proto 2`, golden vectors); Phase 01's app decodes the live stream; the **forward flow** landed 2026-07-25 on all five tabs and was driven on an emulator — chat (send + emergency lane 0), position sharing with distance decimation, roster rename, staged-then-explicit config writes, node-computed airtime stats. The **first-run flow** landed the same day: launch theme + boot screen, then four setup steps (intro · BLE permissions with an explicit "location: later, at the tap" row · One UI battery exemption · node URL, persisted and editable), re-enterable from Config. BLE permissions are declared per §5; no GATT connection is opened anywhere — that stays Phase 03. **Per-client position cursors and backlog resume** landed the same day: every position is logged with a monotonic seq before broadcast, the client states its own cursor on connect, and the node replies with what it owes plus how many records aged out first — a gap is named, never drawn through. Catch-up is chunked and interleaved with live traffic (§3). A **Link screen** (tap the status bar, not a sixth tab) shows permissions · wifi · ble · session as an ordered flow without gating the app. **The phone's own GPS landed 2026-07-26:** `LocationManager` (not the fused provider — it would smooth the uncertainty §6 says must be rendered), permission asked for *at the tap on share*, your own dot drawn from your own fix with a solid ring while peers keep dashed ones, distances measured from you rather than from the node, and the node's fix kept as a fallback that says it is the node's. What is left in Phase 02: Room for the track itself, then two clients side by side with one deliberately flooding. The T-Beam stays in its box until Phase 03.
+**What runs on hardware today** *(2026-07-26)*: boot inventories both I²C buses and names every chip that answers; the PMU is read before anything is written to it; ALDO4 is switched on and the **GNSS delivers real fixes** (rx 9 / tx 8, 9600) which become 32-byte records with position, satellites, HDOP, altitude, speed, course and the 2D/3D flag; `hello.mode` reports `gnss` or `synthetic` so no client can confuse a demo track with a position; LittleFS mounts; the OLED shows ssid, clients, BLE state, power source and GNSS state; BLE advertises with a GATT service; the SoftAP serves `proto 2` at `ws://192.168.4.1/ws`. Three hand-written codecs (JS, Kotlin, C) reproduce the same golden vectors byte for byte.
+
+**What runs in the app**: five tabs, first-run setup, the phone's own GNSS behind "share my position" with the node's fix as a labelled fallback, per-client cursors and backlog resume, chat with node-assigned seq, staged-then-explicit config, sockets pinned to the WiFi network and reconnecting by themselves, two basemaps with an explicit offline download, and a shared component set for error/waiting/empty states.
+
+**Next, in order:**
+
+1. **Verify the app's BLE path against the node.** The firmware half is running and untested from the app — scan, connect, subscribe, and confirm records arrive in the §4 chunk framing with the negotiated MTU.
+2. **A breakpoint in `app_main` over the built-in USB-JTAG** (`idf.py openocd` / `idf.py gdb`). Set it up before it is needed, not after three days of `printf`.
+3. **Read the BME280** so `baro` and `tmp` carry values instead of sentinels — it is fitted on this unit.
+4. **Room for the track** on the phone: the cursor survives a restart, the history does not.
+5. **Two clients side by side, one deliberately flooding** — the Phase 02 pressure test, now possible against real hardware.
 
 **Naming rule (2026-07-25):** clients are **callsigns** (`alpha`, `bravo`, `charlie`, … — NATO alphabet), never personal names, anywhere in code, tests, docs or wireframes.
-
-**Phase 03 is under way** *(2026-07-26)*. `firmware/` is no longer a skeleton: ESP-IDF v5.3.1 is installed (under `Desktop/C0D3/`, toolchain included — `firmware/README.md` has the order, and `IDF_TOOLS_PATH` has to be set before `export.sh`), and `idf.py build` is green at 1.0 MB with 62% of the app partition free. In the image now: the I²C inventory (`board.c`, which names every address that answered and says what a missing chip costs), the SoftAP with its idle timeout compiled in (`wifi_ap.c`), and NimBLE advertising with no GATT service yet on purpose (`ble_adv.c`).
-
-**Nothing has been flashed** — the board has not been plugged in. The remaining steps of the phase:
-
-1. ~~Install ESP-IDF, `idf.py set-target esp32s3`~~ — done
-2. `idf.py flash monitor` with the board attached — expect the I²C inventory, "littlefs mounted", `advertising as "lokalgrid"`, `AP up`, then the heartbeat. **If the I²C scan is empty, suspect `board_pins.h` before the chips**: those pins come from LilyGO's `utilities.h` and are unverified against this unit, which is exactly what the scan exists to settle.
-3. OpenOCD + GDB over the built-in USB-JTAG, breakpoint in `app_main`, confirm it hits
-4. Phone sees `lokalgrid` in its WiFi list and in nRF Connect
-5. `esp_http_server` serving `proto 2` over WebSocket + GNSS on UART1 → real 32-byte records, so the app already on the phone lights up on real hardware; then the BLE GATT path, which is the one thing the mock could never give you
-
-**Then:** Phases 04+ on real hardware, and keep the build log going throughout.
 
 ### If this stops being fun
 

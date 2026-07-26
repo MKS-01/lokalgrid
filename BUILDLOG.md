@@ -1,5 +1,39 @@
 # Build log
 
+## 2026-07-26 (late) — a real fix from the real board, and proto 2 over two wires
+
+**The headline: the T-Beam reported its own position.**
+
+```
+I gnss: answered on rx=9 tx=8 at 9600 baud (256 bytes)
+I gnss: first fix: 22.1081340, 82.2015873 · 4 sats · hdop 3.2
+```
+
+Which means `hello.mode` now says `gnss` rather than `synthetic`, and the records going out over both transports are real: position, satellite count, HDOP, altitude, speed, course, 2D-vs-3D. Four satellites and HDOP 3.2 indoors is a wide ring, and a wide ring is the product working.
+
+**Getting there was a power question, not a pin question.** The read-only PMU pass printed the rail map before anything was written: `0x90 = 0x17`, with **ALDO4 programmed at 3.3 V and switched off**. A rail with a sensible voltage and no enable bit is the signature of a peripheral the factory firmware powers on demand — so the receiver was never dead, it was unpowered. Switching it on is one bit in `0x90` and no voltage register, which is the entire safety argument; `axp_enable_rail()` is written so it *cannot* change a voltage even if asked. With the rail on, `gnss.c` probed candidate pin pairs and baud rates looking for something unmistakably a receiver (`$G…` or a UBX preamble) and reported which answered, so `board_pins.h` now records verified values instead of LilyGO's taken on trust — the same tactic that found the second I²C bus.
+
+Also settled: with ALDO4 on and both buses re-scanned, the **QMI8658 still does not answer**. This variant has no IMU. The motion gate falls back to GNSS speed and the boot log says so.
+
+**BLE is real.** The protocol moved out of `net_ws.c` into `session.c` behind a transport interface — `proto 2` exists **once**, and `net_ws.c` and `ble_gatt.c` are thin adapters. A second copy of the protocol per transport would guarantee the two drift apart, which is exactly the bug this project already expects between C and Kotlin (§6); inviting a third instance on purpose would be daft. A client is a client whichever wire it arrived on: one roster, one cap of 9, and the roster names each client's transport. The GATT service carries control frames on one characteristic and records on another in the §4 chunk framing, sized from the negotiated MTU and carrying whole records only. `BleClient.kt` is the phone half — service-filtered scan, 517 MTU, 2M PHY, notifications enabled one descriptor at a time because Android drops overlapping GATT operations silently, CRC-16 checked and sequence gaps named.
+
+**The app's worst bug is fixed at the root.** The socket flow never *ended* on failure, so nothing retried: the app opened a socket at launch, the phone joined the node's WiFi after that, and the only way back was to kill the app. A field node you have to restart an app to talk to is not a field node. Now the flow closes, the ViewModel retries with bounded backoff naming the wait on screen, and a WiFi change forces an immediate attempt — joining the AP is precisely the event that makes the next one succeed. Sockets are also pinned to the WiFi `Network` now, because the node's AP has no internet route and Android quietly reroutes unbound sockets to mobile data, where `192.168.4.1` goes nowhere while the phone shows itself connected.
+
+**Six things looked nothing like their causes**, which is most of what the day actually was:
+
+1. **PSRAM boot loop.** `CONFIG_SPIRAM_MODE_OCT` from §1's "8 MB octal" → `PSRAM ID read error` → `abort()`, forever. This module is **quad**. `SPIRAM_IGNORE_NOTFOUND` went in alongside so absent PSRAM costs the node its backlog buffers with a warning instead of taking it down.
+2. **No PMU on a battery-powered board.** There are **two I²C buses**: display, barometer and magnetometer on i2c0 (17/18), PMU and RTC on i2c1 (42/41).
+3. **The display went dead after adding the rail re-scan.** Creating an I²C bus a second time returns `ESP_ERR_INVALID_STATE` *and* leaves the existing handle unusable. `board_scan_i2c()` reuses a live bus now.
+4. **BLE stopped advertising** with a bare `adv fields rejected: 4`. Flags + name + tx power + a 128-bit UUID is 35 bytes against a 31-byte advertisement. The service UUID moved to the scan response, which Android merges into the same `ScanRecord`.
+5. **The UUIDs did not match.** `BLE_UUID128_INIT` takes the sixteen bytes **little-endian** — the app would have scanned forever finding nothing, with no error anywhere. Caught by reading, not by debugging, which is the only cheap way to catch that one.
+6. **`httpd_start` returned `ESP_ERR_INVALID_ARG`.** `max_open_sockets` must be ≤ LWIP sockets − 3, so the default ceiling of 10 capped the server at 7 — below the 9-client cap. And my own `ESP_ERROR_CHECK` around it turned a failed server into a boot loop, which is the same mistake the SDK made with PSRAM an hour earlier.
+
+**On the app side, beyond BLE:** two basemaps instead of four (satellite and topo were there because they were free), an explicit offline tile download that shows the tile count and rough size *before* it starts and names every failure including the library's tile ceiling, and a shared component set — `Icons.kt` (eight thin-stroke vector marks, no Material set) and `States.kt` (`ErrorState` / `WaitingState` / `EmptyState` / `DoneState` / `IconRow`) so "empty" and "broken" stop looking alike from screen to screen. The emulator caught one crash: the Map tab took the app down because `OfflineManager` reaches for MapLibre's file source before `MapLibre.getInstance` had run.
+
+**The C codec earns its keep:** `record.c` reproduces all five golden vectors byte for byte, checked by `firmware/test/run.sh`, which builds it for the host with `cc` — no ESP-IDF, no board. Three hand-written implementations of one format now agree, so the Phase 05 drift bug still has not happened, which is correct.
+
+**Next:** verify the app's BLE path against the node (the firmware half is running and untested from the phone), a breakpoint in `app_main` over USB-JTAG, read the BME280 so `baro`/`tmp` stop being sentinels, then Room for the track and the two-client flood test.
+
 ## 2026-07-26 (night) — it boots, and the screen says something
 
 **The board is running our firmware.** Flashed, booted, five chips inventoried, SoftAP up, BLE advertising, and the OLED showing real status. Phase 03's headline milestone in one sitting — with three assumptions demolished on the way, all of them by running rather than reading.

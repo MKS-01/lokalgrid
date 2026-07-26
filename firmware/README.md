@@ -113,11 +113,12 @@ idf.py gdb              # terminal 2 — then: b app_main / c
 | I²C inventory of this variant's chips | done — 5 chips across two buses, no IMU |
 | SoftAP `lokalgrid` + NimBLE advertising | done — AP at 192.168.4.1, advertising |
 | OLED showing real status | done — ssid, phones, BLE, uptime |
+| AXP2101 read, GNSS rail (ALDO4) switched on | done — the IMU is genuinely absent |
+| WebSocket serving `proto 2` to the Android app | done — `ws://192.168.4.1/ws` |
+| GNSS on UART1 → real 32-byte records | done — rx 9 / tx 8 @ 9600, real fixes |
+| BLE GATT service (the un-mockable one, §6) | done on the node; **unverified from the app** |
 | Breakpoint in `app_main` over USB-JTAG | not yet |
-| AXP2101: battery %, rails for GNSS/LoRa | next — the IMU may be behind a rail |
-| WebSocket serving `proto 2` to the Android app | next |
-| GNSS on UART1 → real 32-byte records | next |
-| BLE GATT sync path (the un-mockable one, §6) | after that |
+| BME280 read (fitted, so `baro`/`tmp` are sentinels for now) | not yet |
 | SX1262 | Phase 06, and not before an antenna flag exists |
 
 ## Layout
@@ -132,5 +133,11 @@ main/
   board.c/.h          I²C scan — what this variant actually has
   oled.c/.h           SH1106/SSD1306, 6 lines of 5x7 text, hand-written
   wifi_ap.c/.h        SoftAP + the firmware-enforced idle timeout
-  ble_adv.c/.h        NimBLE advertising (no GATT service yet, on purpose)
+  ble_adv.c/.h        NimBLE GAP: advertising, and the events GATT needs
+  ble_gatt.c/.h       the BLE transport — control + data, §4 chunk framing
+  session.c/.h        proto 2, once, for every transport
+  net_ws.c/.h         the WebSocket transport
+  axp2101.c/.h        PMU: reads everything, switches one bit when asked
+  gnss.c/.h           probes for the receiver, parses NMEA into a fix
+  record.c/.h         the 32-byte codec, C half (host-testable)
 ```

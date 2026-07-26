@@ -210,20 +210,20 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <div class="rail"><span class="no">02</span>Hardware<p>The node. Everything is on the board already — the additions are two antennas and a cell.</p></div>
   <div class="body">
     <h2>The board</h2>
-    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. <b>Band: 868 MHz</b>, confirmed by the owner as the India-compatible variant (2026-07-26). 865–867 MHz is India’s delicensed ISM allocation and the Meshtastic <code>IN</code> region — centre the beacon inside it rather than using the full EU 868 range, and buy an 865–868 MHz whip. Worth confirming <code>868M</code> on the silkscreen beside the SMA connector before the first transmission.</div>
+    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. <b>Band: 868 MHz</b>, the India-compatible variant. 865–867 MHz is India’s delicensed ISM allocation and the Meshtastic <code>IN</code> region — centre the beacon inside it rather than using the full EU 868 range, and buy an 865–868 MHz whip. Worth confirming <code>868M</code> on the silkscreen beside the SMA connector before the first transmission.</div>
 
     <div class="tw"><table>
       <thead><tr><th>Subsystem</th><th>Part</th><th class="m">Bus</th></tr></thead>
       <tbody>
-        <tr><td>MCU</td><td>ESP32-S3FN8 — dual core, 8 MB flash, 8 MB octal PSRAM</td><td class="m">—</td></tr>
+        <tr><td>MCU</td><td>ESP32-S3FN8 — dual core, 8 MB flash, 8 MB <b>quad</b> PSRAM</td><td class="m">—</td></tr>
         <tr><td>LoRa</td><td>SX1262</td><td class="m">SPI2 (dedicated)</td></tr>
         <tr><td>GNSS</td><td>L76K (some units ship u-blox MAX-M10S)</td><td class="m">UART1</td></tr>
-        <tr><td>PMU</td><td>AXP2101, with coulomb counter</td><td class="m">I²C0</td></tr>
-        <tr><td>IMU</td><td>QMI8658</td><td class="m">I²C0</td></tr>
-        <tr><td>Magnetometer</td><td>QMC6310</td><td class="m">I²C0</td></tr>
-        <tr><td>Baro / temp / humidity</td><td>BME280 <i>(absent on some variants)</i></td><td class="m">I²C0</td></tr>
-        <tr><td>RTC</td><td>PCF8563</td><td class="m">I²C0</td></tr>
-        <tr><td>Display</td><td>1.3&Prime; OLED, 128×64</td><td class="m">I²C0</td></tr>
+        <tr><td>PMU</td><td>AXP2101, with coulomb counter. Switches the GNSS and LoRa rails — <b>ALDO4 is the GNSS one</b>, and it powers up switched off.</td><td class="m">I²C1</td></tr>
+        <tr><td>IMU</td><td>QMI8658 — <b>not fitted on this unit</b>; the motion gate falls back to GNSS speed</td><td class="m">—</td></tr>
+        <tr><td>Magnetometer</td><td>QMC6310 <i>(parked by decision)</i></td><td class="m">I²C0 · 0x1c</td></tr>
+        <tr><td>Baro / temp / humidity</td><td>BME280 — <b>fitted</b> on this unit, not yet read</td><td class="m">I²C0 · 0x77</td></tr>
+        <tr><td>RTC</td><td>PCF8563</td><td class="m">I²C1 · 0x51</td></tr>
+        <tr><td>Display</td><td>1.3&Prime; OLED, 128×64, SH1106</td><td class="m">I²C0 · 0x3c</td></tr>
         <tr><td>Storage</td><td>microSD</td><td class="m">SPI3 (dedicated)</td></tr>
         <tr><td>Power</td><td>18650 holder on the baseboard</td><td class="m">—</td></tr>
       </tbody>
@@ -285,6 +285,8 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
     <p class="legend"><i class="lg-t"></i>sensing <i class="lg-r"></i>radio <i class="lg-p"></i>power <i style="background:var(--card);border-color:var(--ink)"></i>other</p>
 
     <div class="note bad"><b>Non-negotiable.</b> The SX1262 and the microSD stay on <b>separate SPI buses</b> — sharing one gives corrupt writes that appear only when a beacon fires mid-write, which is a fault you will chase for a weekend. <b>Never transmit without an antenna attached:</b> every hardware-damage path on this board runs through the LoRa PA, and firmware must refuse TX until an assembly flag is set. 3.3 V maximum on any GPIO. Never burn the eFuse. Do not unseat the core module from the baseboard while powered.</div>
+
+    <div class="note"><b>Two I²C buses, not one.</b> The display, barometer and magnetometer sit on i2c0 (sda 17, scl 18); the PMU and RTC on i2c1 (sda 42, scl 41). A scan of i2c0 alone finds no PMU on a board that runs from a battery, which is how the second bus was found — the firmware sweeps both at boot and names every address that answers, so a variant difference reads as a fact rather than a fault.</div>
 
     <h2>What each peripheral is for</h2>
     <p>Every part has a job or is explicitly parked, so a later session never has to guess whether an idle chip is an oversight or a decision.</p>
@@ -350,7 +352,8 @@ storage  , data, littlefs ,        , 0x2C0000   <i>// track log + manifest</i></
     <h3>sdkconfig — the lines that matter</h3>
 <pre>CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9      <i>// default is 1; 9 is NimBLE's ceiling — the multi-client switch</i>
 CONFIG_ESP_WIFI_SOFTAP_MAX_STA=10       <i>// 9 clients + rejoin headroom</i>
-CONFIG_SPIRAM_MODE_OCT=y                <i>// the S3 module is octal PSRAM</i>
+CONFIG_SPIRAM_MODE_QUAD=y               <i>// quad on this module; octal aborts at boot</i>
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y         <i>// absent PSRAM degrades, never panics</i>
 CONFIG_PM_ENABLE=y                      <i>// dynamic frequency scaling</i>
 CONFIG_FREERTOS_USE_TICKLESS_IDLE=y     <i>// the biggest idle-power win</i>
 CONFIG_HTTPD_WS_SUPPORT=y
@@ -577,8 +580,8 @@ node → <b>binary</b> …                                          <i>// live r
     <p>Keys come from an X25519 exchange at pairing, confirmed by a <b>six-digit code shown on the node's own OLED</b> — authenticated key exchange with no server, no QR and no secret typed twice, using a screen the board already has. Per-pair secrets for addressed messages; a node-issued group key, rotated when the roster changes, for the shared channel. Bodies are sealed with an AEAD, so the node schedules and queues from <code>{addressee, length}</code> and never needs the plaintext.</p>
     <div class="note bad"><b>What this does not protect.</b> The node cannot read message bodies, but it does see <em>who</em> talks to whom, <em>when</em>, and <em>how long</em> the message was. Traffic analysis is not defended against, and bodies sit decrypted in app-private storage on the phone. Written down because a &ldquo;secure&rdquo; badge implying more would break the honesty rule harder than any spinner. Encrypting the <em>track log at rest</em> with an eFuse-burned key is a different threat model and is not planned.</div>
 
-    <h2>BLE transfer — Phase 03</h2>
-    <p>The WebSocket path exists and works. The GATT path cannot be mocked, so it is built against the real board.</p>
+    <h2>BLE transfer</h2>
+    <p>Both transports run the same session, so a client is a client whichever wire it arrived on. The service is <code>6f6b616c-6772-6964-0000-000000000001</code>, advertised in the scan response; <code>…0002</code> carries control frames (write and notify), <code>…0003</code> notifies records in the framing below. The service UUID goes in the scan response because flags, name, transmit power and a 128-bit UUID do not fit in a 31-byte advertisement.</p>
 <pre>+--------+--------+---------------------+---------+
 | seq u16| len u16|    payload (N B)    |crc16 u16|
 +--------+--------+---------------------+---------+
@@ -606,29 +609,32 @@ crc16 CCITT over seq + len + payload</pre>
 <section id="state">
   <div class="rail"><span class="no">05</span>State<p>What runs today, and the order of what comes next.</p></div>
   <div class="body">
-    <h2>Ready</h2>
-    <p>Everything below runs against the mock node, with the board still in its box. The mock speaks the same protocol the firmware will, which is what makes that possible.</p>
+    <h2>Running on hardware</h2>
+    <p>The board serves the app. The mock node is still there and still speaks the same protocol, which is what lets app work continue with the board unplugged.</p>
     <div class="tw"><table>
       <thead><tr><th>Piece</th><th>State</th><th>Detail</th></tr></thead>
       <tbody>
+        <tr><td><code>firmware/</code> on the T-Beam</td><td><span class="pill ok">running</span></td><td>ESP-IDF v5.3.1. Boots, inventories both I²C buses, reads the PMU, switches the GNSS rail, mounts LittleFS, advertises over BLE with its GATT service, brings up the SoftAP and serves <code>proto 2</code> on <code>ws://192.168.4.1/ws</code>. The OLED shows ssid, clients, BLE state, power source and GNSS state, so the node is readable with no phone attached.</td></tr>
+        <tr><td>GNSS</td><td><span class="pill ok">real fixes</span></td><td>UART1, rx 9 / tx 8 at 9600, behind ALDO4. NMEA GGA/RMC/GSA into the 32-byte record: position, satellites, HDOP, altitude, speed, course, 2D-vs-3D. <code>hello.mode</code> says <code>gnss</code> once a fix exists and <code>synthetic</code> before, so no client can mistake one for the other.</td></tr>
+        <tr><td>Transports</td><td><span class="pill ok">two</span></td><td>WiFi WebSocket and BLE GATT run the <b>same</b> session: one protocol implementation, one roster, one client cap of 9, and each client's transport named on the roster. BLE is verified on the node; the app's half is not yet verified against it.</td></tr>
         <tr><td><code>mock-node/</code></td><td><span class="pill ok">running</span></td><td>Node.js. Synthetic track + replay, the full control-frame protocol, chat with node-assigned sequence numbers, the airtime queue with lanes and deficit round-robin, position decimation, config with locked keys, airtime stats, the position log with cursors and chunked backlog. <code>--ghosts N</code> adds synthetic peers; <code>CAP</code>, <code>DUTY</code>, <code>HISTORY</code> tune the pressure.</td></tr>
         <tr><td><code>android/:protocol</code></td><td><span class="pill ok">green</span></td><td>The 32-byte codec and every control frame, hand-parsed so an unknown frame from a newer node renders instead of killing the socket. 26 tests, including frame strings copied verbatim from the mock.</td></tr>
-        <tr><td><code>android/:app</code></td><td><span class="pill ok">runs</span></td><td>Five tabs, the Link screen, first-run setup, the map with accuracy rings and a resumed track line, chat with delivery and queue state, cursors persisted per node. <b>The phone's own GNSS</b> drives your dot and what &ldquo;share my position&rdquo; sends, with the node's fix as a labelled fallback. Driven end to end on an emulator.</td></tr>
-        <tr><td>Tests</td><td><span class="pill ok">37 + 26</span></td><td><code>npm test</code> in <code>mock-node/</code>; <code>./gradlew :protocol:test</code> in <code>android/</code>. Neither needs a device or a board.</td></tr>
-        <tr><td><code>firmware/</code></td><td><span class="pill n">parked</span></td><td>CMake shell, partition table, sdkconfig defaults, LittleFS mount in <code>app_main</code>. Waiting for Phase 03; ESP-IDF is not installed yet.</td></tr>
+        <tr><td><code>android/:app</code></td><td><span class="pill ok">runs</span></td><td>Five tabs, the Link screen, first-run setup, the map with accuracy rings and a resumed track line, chat with delivery and queue state, cursors persisted per node. The phone's own GNSS drives your dot and what &ldquo;share my position&rdquo; sends, with the node's fix as a labelled fallback. Sockets are pinned to the WiFi network and reconnect by themselves. Two basemaps, and the visible area can be saved for offline use.</td></tr>
+        <tr><td>Codecs</td><td><span class="pill ok">three, agreeing</span></td><td>JS, Kotlin and C, each hand-written, all reproducing the same golden vectors byte for byte. <code>firmware/test/run.sh</code> builds the C one for the host — no board, no ESP-IDF.</td></tr>
+        <tr><td>Tests</td><td><span class="pill ok">37 + 26 + 5</span></td><td><code>npm test</code> in <code>mock-node/</code>; <code>./gradlew :protocol:test</code> in <code>android/</code>; <code>firmware/test/run.sh</code>. None needs a device or a board.</td></tr>
       </tbody>
     </table></div>
 
     <h2>Next, in order</h2>
     <ol>
-      <li><b>Finish the mock-side work.</b> Room for the track itself — the cursor persists across a restart, the history does not — then two clients side by side with one deliberately flooding. <i>(The phone's own GPS behind &ldquo;share my position&rdquo; landed 2026-07-26.)</i></li>
-      <li><b>Phase 03 — the board comes out.</b> ESP-IDF v5.x installed, <code>idf.py set-target esp32s3</code>, first build and flash expecting &ldquo;littlefs mounted&rdquo;. Then OpenOCD and GDB over the built-in USB-JTAG with a real breakpoint in <code>app_main</code>. Then SoftAP with a fixed SSID plus BLE advertising, so the phone sees <code>lokalgrid</code> in its WiFi list and in nRF Connect. Then point the app's WebSocket at the real SoftAP and build the GATT path against real hardware. Minimal OLED — SSID, client count, fix, battery — while the board is already on the bench.</li>
+      <li><b>Close out the board bring-up.</b> A breakpoint in <code>app_main</code> over the built-in USB-JTAG, the app's BLE path verified against the node's GATT service, and the BME280 read so <code>baro</code> and <code>tmp</code> carry values instead of sentinels.</li>
+      <li><b>Finish the app-side work.</b> Room for the track itself — the cursor survives a restart, the history does not — then two clients side by side with one deliberately flooding.</li>
       <li><b>Phase 04 — make it fight, and show the price.</b> The scheduler hardened against real airtime timing, then the airtime economy as a feature: cost before sending, share of the hour, a queue you can cancel or promote. OLED status pages and the physical emergency button.</li>
       <li><b>Phase 04b — encryption, the device store, the dead-drop.</b> X25519 pairing confirmed on the OLED, Room as the durable archive, and sealed messages held for people who are not here yet.</li>
       <li><b>Phase 05 — fix the drift.</b> When the hand-written codecs have disagreed once, schema and codegen arrive with shared golden vectors.</li>
       <li><b>Phase 06 and beyond, optional.</b> LoRa under the scheduler, the power ladder, the booster role; then time from the 1PPS pin and PMTiles served off the node.</li>
     </ol>
-    <div class="note ok"><b>Phase 03 is a complete project.</b> Three phones on a shared map served by the real board is a finished thing. Everything after it is optional by design, and stopping there is a success rather than an abandonment.</div>
+    <div class="note ok"><b>Phase 03 is a complete project.</b> Phones on a shared map served by the real board is a finished thing. Everything after it is optional by design, and stopping there is a success rather than an abandonment.</div>
 
     <h2>Open</h2>
     <div class="note ok"><b>The LoRa band is settled: 868, kept inside 865–867.</b> Buy the whip to match; a mismatched one gives poor range that reads exactly like a firmware bug and degrades the PA over weeks. Nothing before Phase 06 transmits, so it gates only the radio work.</div>
@@ -648,7 +654,7 @@ crc16 CCITT over seq + len + payload</pre>
 </section>
 
 <footer>
-  Lokalgrid · reference spec · rebuilt 2026-07-25 · decisions in PROJECT.md · history in BUILDLOG.md · MIT licensed
+  Lokalgrid · reference spec — current state only · decisions and their dates in PROJECT.md · history in BUILDLOG.md · MIT licensed
 </footer>
 
 </div>
