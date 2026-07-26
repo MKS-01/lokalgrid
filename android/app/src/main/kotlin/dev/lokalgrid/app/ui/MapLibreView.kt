@@ -30,6 +30,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.lokalgrid.app.ui.map.BASEMAPS
+import dev.lokalgrid.app.ui.map.Basemap
 import dev.lokalgrid.app.ui.theme.Lg
 import dev.lokalgrid.protocol.TrackRecord
 import org.maplibre.android.MapLibre
@@ -59,28 +61,6 @@ private const val SRC_TRACK = "lg-track"
 private const val SRC_ME_DOT = "lg-me-dot"
 private const val SRC_ME_ACC = "lg-me-acc"
 
-/** Keyless raster basemaps — no API key, no quota. The offline PMTiles basemap
- *  (§6) replaces these later; for now the user can switch source at runtime. */
-private data class Basemap(val name: String, val url: String, val attribution: String, val maxZoom: Int)
-
-private val BASEMAPS = listOf(
-    Basemap("Streets", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "© OpenStreetMap contributors", 19),
-    Basemap("Sat", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", "© Esri, Maxar, Earthstar Geographics", 19),
-    Basemap("Dark", "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", "© OpenStreetMap, © CARTO", 20),
-    Basemap("Topo", "https://tile.opentopomap.org/{z}/{x}/{y}.png", "© OpenTopoMap (CC-BY-SA)", 17),
-)
-
-private fun styleJson(b: Basemap): String = """
-{
-  "version": 8,
-  "sources": { "base": {
-    "type": "raster", "tiles": ["${b.url}"], "tileSize": 256,
-    "maxzoom": ${b.maxZoom}, "attribution": "${b.attribution}"
-  } },
-  "layers": [ { "id": "base", "type": "raster", "source": "base" } ]
-}
-"""
-
 private class MapHolder {
     var map: MapLibreMap? = null
     var dot: GeoJsonSource? = null
@@ -97,6 +77,7 @@ private class MapHolder {
  *  Called on first load and again after every basemap switch (setStyle clears
  *  custom layers). Immediately pushes the latest fix so the dot never blinks out. */
 private fun applyStyle(
+    ctx: android.content.Context,
     map: MapLibreMap,
     b: Basemap,
     holder: MapHolder,
@@ -105,7 +86,7 @@ private fun applyStyle(
     track: List<TrackRecord>,
     me: Peer?,
 ) {
-    map.setStyle(Style.Builder().fromJson(styleJson(b))) { style ->
+    map.setStyle(Style.Builder().fromUri(b.styleUri(ctx))) { style ->
         // The observed track, under everything else. This is what the position
         // backlog is *for*: on resume the node streams the history it holds, and
         // it lands here as a line instead of a counter nobody can check.
@@ -263,6 +244,9 @@ fun MapLibreView(
     peers: List<Peer> = emptyList(),
     track: List<TrackRecord> = emptyList(),
     me: Peer? = null,
+    /** Which basemap is showing, and what the camera can see — the offline
+     *  download needs both, and the map is the only thing that knows them. */
+    onCamera: (Basemap, org.maplibre.android.geometry.LatLngBounds, Int) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -306,7 +290,11 @@ fun MapLibreView(
                         // hide the built-in +/- since we provide our own
                         isCompassEnabled = true
                     }
-                    applyStyle(map, basemap, holder, latest, peers, track, me)
+                    applyStyle(context, map, basemap, holder, latest, peers, track, me)
+                    map.addOnCameraIdleListener {
+                        val region = map.projection.visibleRegion
+                        onCamera(basemap, region.latLngBounds, map.cameraPosition.zoom.toInt())
+                    }
                 }
                 mapView
             },
@@ -337,7 +325,7 @@ fun MapLibreView(
             for (b in BASEMAPS) {
                 StyleChip(b.name, active = b.name == basemap.name) {
                     basemap = b
-                    holder.map?.let { applyStyle(it, b, holder, latest, peers, track, me) }
+                    holder.map?.let { applyStyle(context, it, b, holder, latest, peers, track, me) }
                 }
             }
         }

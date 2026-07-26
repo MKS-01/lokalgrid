@@ -3,7 +3,9 @@ package dev.lokalgrid.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.lokalgrid.app.loc.PhoneLocation
+import dev.lokalgrid.app.net.BleClient
 import dev.lokalgrid.app.net.NodeClient
+import dev.lokalgrid.app.net.WifiBinding
 import dev.lokalgrid.app.ui.hdopTimes10
 import dev.lokalgrid.protocol.ClientFrame
 import dev.lokalgrid.protocol.Lane
@@ -11,6 +13,8 @@ import dev.lokalgrid.protocol.NodeFrame
 import dev.lokalgrid.protocol.RosterEntry
 import dev.lokalgrid.protocol.TrackRecord
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,6 +84,9 @@ data class LiveState(
     val myFix: PhoneLocation.Fix? = null,   // last fix from this phone, kept with its age
     val fineLocation: Boolean = false,      // precise, or coarse-only
     val lastShareSource: String? = null,    // which fix actually went, stated plainly
+    // which wire this session is on, and what BLE negotiated on it
+    val transport: String = "wifi",
+    val bleMtu: Int = 0,
     // position cursor + backlog resume
     val posCursor: Long = 0,          // last position seq we have; ours to state, not guess
     val posHeld: Int = 0,             // how many the node still holds
@@ -121,10 +128,23 @@ class LiveViewModel(
     private val savedCursor: Long = 0,
     private val onCursor: (Long) -> Unit = {},
     private val gps: PhoneLocation? = null,
+    /** Pins the socket to the WiFi the node is on; null falls back to whatever
+     *  route Android picks, which is fine for the mock and wrong for a SoftAP. */
+    private val binding: WifiBinding? = null,
+    /** The BLE transport. Same protocol, different wire — see BleClient. */
+    private val ble: BleClient? = null,
+    /** "wifi" or "ble". The session is identical either way (§3): only the bytes
+     *  travel differently, so nothing above this layer changes. */
+    private val transport: String = "wifi",
+    private val bleAddress: String? = null,
 ) : ViewModel() {
 
-    private val client = NodeClient(url)
-    private val _state = MutableStateFlow(LiveState(url = url, posCursor = savedCursor))
+    private val client = NodeClient(url, binding)
+    private val useBle: Boolean get() = transport == "ble" && bleAddress != null && ble != null
+
+    private val _state = MutableStateFlow(
+        LiveState(url = url, posCursor = savedCursor, transport = transport)
+    )
     val state: StateFlow<LiveState> = _state.asStateFlow()
 
     private var msgCounter = 0
@@ -137,9 +157,25 @@ class LiveViewModel(
     private var link: Job? = null
     private var gpsJob: Job? = null
 
+    /** Consecutive failed attempts, for the backoff and for what the UI says. */
+    private var attempt = 0
+    private var lastError: String? = null
+
     init {
         connect()
         watchGps()
+        // Joining the node's AP is the event that makes the next attempt work, so
+        // it retries immediately rather than sitting out the backoff.
+        binding?.onChanged = {
+            _state.value = _state.value.copy(status = "wifi changed — reconnecting")
+            connect()
+        }
+    }
+
+    override fun onCleared() {
+        binding?.onChanged = null
+        onCursor(_state.value.posCursor)
+        super.onCleared()
     }
 
     /**
@@ -165,22 +201,60 @@ class LiveViewModel(
         }
     }
 
+    /**
+     * Keep a socket to the node, for as long as this ViewModel lives.
+     *
+     * The loop is the fix for the worst bug the first hardware test found: the
+     * app opened its socket at launch, the phone joined the node's WiFi *after*
+     * that, and nothing ever tried again — the only way back was to kill the app.
+     * A field node you have to restart an app to talk to is not a field node.
+     *
+     * Backoff is bounded and **named on screen**: "retrying in 4 s" is a state,
+     * a spinner is not (§6). A WiFi change resets it to zero, because joining the
+     * AP is the event most likely to make the next attempt the one that works.
+     */
     private fun connect() {
         link?.cancel()
+        attempt = 0
         link = viewModelScope.launch {
-            client.events().collect { ev ->
-                val next = reduce(_state.value, ev)
-                _state.value = next
-                // Persist occasionally rather than every record: a killed app should
-                // resume a few seconds behind, not from zero. The exact figure is
-                // re-stated to the node on reconnect, which corrects any drift.
-                if (next.posCursor - lastSaved >= 30) {
-                    lastSaved = next.posCursor
-                    onCursor(next.posCursor)
+            while (isActive) {
+                if (attempt > 0) {
+                    val wait = backoffMs(attempt)
+                    _state.value = _state.value.copy(
+                        connected = false,
+                        status = "retrying in ${wait / 1000} s (attempt ${attempt + 1}) · ${lastError ?: "no link"}",
+                    )
+                    delay(wait)
                 }
+                attempt++
+
+                val events = if (useBle) ble!!.events(bleAddress!!) else client.events()
+                events.collect { ev ->
+                    if (ev is NodeClient.Event.Status) {
+                        if (ev.connected) attempt = 0 else lastError = ev.detail
+                        if (useBle) _state.value = _state.value.copy(bleMtu = ble!!.mtu)
+                    }
+                    val next = reduce(_state.value, ev)
+                    _state.value = next
+                    // Persist occasionally rather than every record: a killed app
+                    // should resume a few seconds behind, not from zero. The exact
+                    // figure is re-stated to the node on reconnect, which corrects
+                    // any drift.
+                    if (next.posCursor - lastSaved >= 30) {
+                        lastSaved = next.posCursor
+                        onCursor(next.posCursor)
+                    }
+                }
+                // The flow ended, which means the socket failed or closed. Round
+                // again — the cursor survives, so this costs a delta, not a resync.
             }
         }
     }
+
+    /** 1, 2, 4, 8, capped at 15 s — long enough not to hammer a node that is off,
+     *  short enough that walking into range feels immediate. */
+    private fun backoffMs(attempt: Int): Long =
+        (1000L shl (attempt - 1).coerceIn(0, 4)).coerceAtMost(15_000L)
 
     /**
      * Drop the socket and open a new one. The cursor survives, so this resumes a
@@ -190,11 +264,6 @@ class LiveViewModel(
     fun reconnect() {
         _state.value = _state.value.copy(connected = false, status = "reconnecting to $url…")
         connect()
-    }
-
-    override fun onCleared() {
-        onCursor(_state.value.posCursor)
-        super.onCleared()
     }
 
     /**
@@ -218,7 +287,7 @@ class LiveViewModel(
             lane = lane,
             mine = true,
         )
-        val ok = client.send(ClientFrame.Send(id, body, lane))
+        val ok = sendFrame(ClientFrame.Send(id, body, lane))
         _state.value = _state.value.copy(
             messages = _state.value.messages +
                 pending.copy(error = if (ok) null else "not sent — no link to the node")
@@ -227,11 +296,15 @@ class LiveViewModel(
 
     /** Rename yourself on the roster — the node refuses a clash, with a reason. */
     fun setName(name: String) {
-        if (name.isNotBlank()) client.send(ClientFrame.Name(name.trim()))
+        if (name.isNotBlank()) sendFrame(ClientFrame.Name(name.trim()))
     }
 
+    /** One place decides which wire a frame goes out on. */
+    private fun sendFrame(frame: ClientFrame): Boolean =
+        if (useBle) ble!!.send(frame) else client.send(frame)
+
     /** Restart the mock's synthetic track. Phase 03 replaces this with a real one. */
-    fun resetTrack() = client.send(ClientFrame.Reset)
+    fun resetTrack() = sendFrame(ClientFrame.Reset)
 
     /**
      * State our cursors and ask for the delta. The client is authoritative about
@@ -240,7 +313,7 @@ class LiveViewModel(
      */
     fun resync() {
         val s = _state.value
-        client.send(ClientFrame.Cursor(s.messages.maxOfOrNull { it.seq } ?: 0, s.posCursor))
+        sendFrame(ClientFrame.Cursor(s.messages.maxOfOrNull { it.seq } ?: 0, s.posCursor))
     }
 
     /**
@@ -274,7 +347,7 @@ class LiveViewModel(
             frame = ClientFrame.Pos(latE7 = node.latE7, lonE7 = node.lonE7, hd = node.hd, epoch = node.epoch)
             source = "the node's own fix — ${noFixReason(s)}"
         }
-        val ok = client.send(frame)
+        val ok = sendFrame(frame)
         _state.value = _state.value.copy(
             positionsShared = if (ok) _state.value.positionsShared + 1 else _state.value.positionsShared,
             lastShareSource = if (ok) source else null,
@@ -296,7 +369,7 @@ class LiveViewModel(
 
     /** Write staged config. Explicit, never mid-edit (§6). */
     fun writeConfig(patch: Map<String, String>) {
-        if (patch.isNotEmpty()) client.send(ClientFrame.ConfigSet(patch))
+        if (patch.isNotEmpty()) sendFrame(ClientFrame.ConfigSet(patch))
     }
 
     private fun reduce(s: LiveState, ev: NodeClient.Event): LiveState = when (ev) {

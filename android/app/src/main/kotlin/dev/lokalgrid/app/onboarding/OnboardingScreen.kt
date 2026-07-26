@@ -230,8 +230,8 @@ private fun StepNode(url: String, onUrl: (String) -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text("The node", color = Lg.Ink, fontFamily = Mono, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Body(
-            "Until the T-Beam exists (Phase 03), the app talks to the mock node: " +
-                "`npm start` in mock-node/ serves the same WebSocket protocol."
+            "The T-Beam serves this itself now. The mock node is still there for " +
+                "work with the board unplugged: `npm start` in mock-node/, same protocol."
         )
 
         SectionLabel("websocket url")
@@ -241,15 +241,21 @@ private fun StepNode(url: String, onUrl: (String) -> Unit) {
             placeholder = Prefs.DEFAULT_URL,
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
+        Note("The node: ws://192.168.4.1/ws — join its \"lokalgrid\" WiFi first.")
         Note("Emulator: ws://10.0.2.2:8787 — that alias only works there.")
         Note("Real phone: ws://<your dev machine's LAN IP>:8787, same WiFi.")
         Note("Phase 03: the T-Beam's own SoftAP, fixed SSID `lokalgrid`.")
 
         SectionLabel("presets")
         Row(Modifier.fillMaxWidth()) {
-            Box(Modifier.weight(1f)) { LgButton("Emulator") { onUrl(Prefs.DEFAULT_URL) } }
+            Box(Modifier.weight(1f)) { LgButton("The node", primary = true) { onUrl(Prefs.NODE_URL) } }
             Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) { LgButton("Emulator") { onUrl(Prefs.DEFAULT_URL) } }
+        }
+        Row(Modifier.fillMaxWidth()) {
             Box(Modifier.weight(1f)) { LgButton("LAN :8787") { onUrl("ws://192.168.1.") } }
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) { }
         }
         Note("You can change this later in Config → setup.")
     }

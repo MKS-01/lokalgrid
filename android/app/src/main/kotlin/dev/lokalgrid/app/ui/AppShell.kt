@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.lokalgrid.app.LiveState
 import dev.lokalgrid.app.loc.PhoneLocation
+import dev.lokalgrid.app.net.BleClient
 import dev.lokalgrid.app.ui.screens.ChatScreen
 import dev.lokalgrid.app.ui.screens.ClientsScreen
 import dev.lokalgrid.app.ui.screens.ConfigScreen
@@ -55,6 +56,9 @@ fun AppShell(
     onReopenSetup: () -> Unit = {},
     onReconnect: () -> Unit = {},
     onLocationChanged: () -> Unit = {},
+    ble: BleClient? = null,
+    onUseBle: (String) -> Unit = {},
+    onUseWifi: () -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var showDiag by remember { mutableStateOf(false) }
@@ -110,6 +114,9 @@ fun AppShell(
             if (showLink) {
                 LinkScreen(
                     state = state,
+                    ble = ble,
+                    onUseBle = onUseBle,
+                    onUseWifi = onUseWifi,
                     onReconnect = onReconnect,
                     onChangeNode = { showLink = false; onReopenSetup() },
                     onClose = { showLink = false },
@@ -170,7 +177,7 @@ private fun AppBar(tab: Tab, state: LiveState, onLongPressTitle: () -> Unit) {
         when (tab) {
             Tab.LIVE, Tab.MAP -> when {
                 state.catchingUp -> Pill("catching up · ${state.backlogRemaining}", PillKind.LORA)
-                state.connected -> Pill("wifi", PillKind.OK)
+                state.connected -> Pill(state.transport, PillKind.OK)
                 else -> Pill("connecting", PillKind.NEUTRAL)
             }
             Tab.CHAT -> {
@@ -236,6 +243,7 @@ private fun DiagnosticsOverlay(state: LiveState, onClose: () -> Unit) {
         InfoRow("dropped", state.dropped.toString())
         state.lastDrop?.let { InfoRow("last drop", it) }
         InfoRow("you", "${state.selfName} (id ${state.selfId})")
+        InfoRow("transport", "${state.transport}${if (state.bleMtu > 0) " · mtu ${state.bleMtu}" else ""}")
         InfoRow("phone gps", gpsLabel(state))
         InfoRow("location grant", if (state.fineLocation) "fine" else "coarse or none")
         state.myFix?.let { InfoRow("my fix", "%.6f, %.6f".format(it.latDeg, it.lonDeg)) }

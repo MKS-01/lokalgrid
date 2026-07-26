@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.app.ui.EmptyState
+import dev.lokalgrid.app.ui.ErrorState
 import dev.lokalgrid.app.ui.CardSub
 import dev.lokalgrid.app.ui.CardTitle
 import dev.lokalgrid.app.ui.InfoRow
@@ -45,9 +47,18 @@ fun ClientsScreen(state: LiveState, onRename: (String) -> Unit = {}) {
     ) {
         SectionLabel("clients · ${state.clientCount} of ${state.cap}")
         if (state.roster.isEmpty()) {
-            LgCard(selected = true) {
-                CardTitle("this device")
-                CardSub(if (state.connected) "wifi · connected · waiting for roster" else "connecting…")
+            if (state.connected) {
+                LgCard(selected = true) {
+                    CardTitle("this device")
+                    CardSub("${state.transport} · connected · waiting for the roster")
+                }
+            } else {
+                // "connecting…" was a spinner in words. The retry loop knows what it
+                // is doing and when, so say that instead (§6).
+                ErrorState(
+                    title = "no node attached",
+                    detail = state.status,
+                )
             }
         } else {
             for (c in state.roster) {

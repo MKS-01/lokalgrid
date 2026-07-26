@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.lokalgrid.app.ChatEntry
 import dev.lokalgrid.app.LiveState
+import dev.lokalgrid.app.ui.EmptyState
+import dev.lokalgrid.app.ui.ErrorState
 import dev.lokalgrid.app.ui.CardSub
 import dev.lokalgrid.app.ui.CardTitle
 import dev.lokalgrid.app.ui.LgButton
@@ -76,12 +78,22 @@ fun ChatScreen(state: LiveState, onSend: (String, Boolean) -> Unit) {
     Column(Modifier.fillMaxSize().background(Lg.Paper).imePadding()) {
         Box(Modifier.weight(1f)) {
             if (state.messages.isEmpty()) {
+                // The same two components every other screen uses for these two
+                // situations, so "empty" and "broken" never look alike (§6).
                 Column(Modifier.padding(horizontal = 14.dp)) {
                     SectionLabel("one shared channel")
-                    CardSub(
-                        if (state.connected) "no messages yet — say something and everyone on the node sees it"
-                        else "not connected to a node · ${state.status}"
-                    )
+                    if (state.connected) {
+                        EmptyState(
+                            title = "no messages yet",
+                            reason = "say something and everyone attached to this node sees it. " +
+                                "History lives on each phone, so this stays after the node is switched off.",
+                        )
+                    } else {
+                        ErrorState(
+                            title = "not connected to a node",
+                            detail = state.status,
+                        )
+                    }
                 }
             } else {
                 LazyColumn(

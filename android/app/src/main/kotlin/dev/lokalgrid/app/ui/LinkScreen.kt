@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.lokalgrid.app.LiveState
 import dev.lokalgrid.app.loc.PhoneLocation
+import dev.lokalgrid.app.net.BleClient
 import dev.lokalgrid.app.onboarding.Setup
 import dev.lokalgrid.app.ui.theme.Lg
 
@@ -57,6 +59,9 @@ private enum class StepState(val label: String, val kind: PillKind) {
 @Composable
 fun LinkScreen(
     state: LiveState,
+    ble: BleClient? = null,
+    onUseBle: (String) -> Unit = {},
+    onUseWifi: () -> Unit = {},
     onReconnect: () -> Unit,
     onChangeNode: () -> Unit,
     onClose: () -> Unit,
@@ -74,6 +79,22 @@ fun LinkScreen(
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted = Setup.allGranted(context, wanted) }
+
+    // Why BLE cannot be used, if it cannot: a missing permission and a switched-off
+    // adapter are different problems with different fixes, and the step says which.
+    val bleWhy: String? = when {
+        ble == null -> "no bluetooth support in this build"
+        !granted && wanted.isNotEmpty() -> "the app has not been granted Bluetooth permission yet"
+        else -> ble.unavailableReason()
+    }
+
+    var scanning by remember { mutableStateOf(false) }
+    var found by remember { mutableStateOf<List<BleClient.Found>>(emptyList()) }
+    if (scanning && ble != null && bleWhy == null) {
+        LaunchedEffect(Unit) {
+            ble.scan().collect { found = it }
+        }
+    }
 
     Column(
         Modifier
@@ -151,19 +172,76 @@ fun LinkScreen(
             Box(Modifier.weight(1f)) { LgButton("Change node", onClick = onChangeNode) }
         }
 
-        // 3 ─ BLE, honestly absent until there is a board to talk to
+        // 3 ─ BLE, real now: the board has a GATT service
+        val onBle = state.transport == "ble"
         Step(
             n = 3,
             title = "ble · always-on link",
-            state = StepState.WAITING,
-            detail = "scan and pair land in Phase 03, against the real T-Beam",
+            state = when {
+                onBle && state.connected -> StepState.DONE
+                onBle -> StepState.WORKING
+                bleWhy != null -> StepState.NEEDS_YOU
+                else -> StepState.WAITING
+            },
+            detail = when {
+                onBle && state.connected -> "connected over ble · mtu ${state.bleMtu}"
+                onBle -> "connecting over ble — ${state.status}"
+                bleWhy != null -> bleWhy
+                else -> "the node serves the same protocol over ble at ~2 mA"
+            },
         )
-        Note(
-            "BLE cannot be mocked (§6), so there is nothing to scan for yet — a scan list " +
-                "that never finds anything would be a fake feature. When the board exists this " +
-                "step grows the scan, the pairing, and the live MTU/PHY numbers."
-        )
-        LgButton("Scan for nodes", enabled = false)
+
+        if (bleWhy != null) {
+            ErrorState(
+                title = "bluetooth is not usable",
+                detail = bleWhy,
+                actionLabel = if (!granted && wanted.isNotEmpty()) "Grant Bluetooth permissions" else null,
+                onAction = if (!granted && wanted.isNotEmpty()) {
+                    { launcher.launch(wanted.toTypedArray()) }
+                } else null,
+            )
+        } else {
+            Note(
+                "BLE is the layer that lets the node stay reachable for a week instead of a day, " +
+                    "and the one the phone can sync over with its screen off. Same session as " +
+                    "wifi — cursors, chat and backlog carry across."
+            )
+            IconRow(
+                LgIcon.Bluetooth,
+                if (onBle) Lg.Lock else Lg.Ink3,
+                "using ble",
+                if (onBle) "yes" else "no, wifi",
+            )
+
+            if (scanning) {
+                if (found.isEmpty()) {
+                    WaitingState(
+                        title = "scanning",
+                        reason = "looking for anything advertising the lokalgrid service. " +
+                            "The node advertises continuously, so a few seconds is enough.",
+                        actionLabel = "Stop",
+                        onAction = { scanning = false },
+                    )
+                } else {
+                    SectionLabel("nodes in range")
+                    for (f in found) {
+                        InfoRow("${f.name} · ${f.address.takeLast(5)}") {
+                            Pill("${f.rssi} dBm", if (f.rssi > -70) PillKind.OK else PillKind.NEUTRAL)
+                        }
+                        LgButton("Use this node over BLE", primary = true) {
+                            scanning = false
+                            onUseBle(f.address)
+                        }
+                    }
+                }
+            } else {
+                LgButton(if (onBle) "Scan again" else "Scan for nodes", primary = !onBle) {
+                    found = emptyList()
+                    scanning = true
+                }
+                if (onBle) LgButton("Go back to wifi") { onUseWifi() }
+            }
+        }
 
         // 4 ─ the session itself: cursors, backlog, what resume will do
         Step(

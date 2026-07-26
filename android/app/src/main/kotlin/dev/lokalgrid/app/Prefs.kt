@@ -24,6 +24,20 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString(KEY_URL, v.trim()).apply()
 
     /**
+     * Which transport to use, and which node over BLE. Stored because walking up
+     * to the node should not mean picking it out of a scan list every time — but
+     * it is *not* automatic across nodes: the address is remembered per choice,
+     * never guessed.
+     */
+    var transport: String
+        get() = sp.getString(KEY_TRANSPORT, TRANSPORT_WIFI) ?: TRANSPORT_WIFI
+        set(v) = sp.edit().putString(KEY_TRANSPORT, v).apply()
+
+    var bleAddress: String?
+        get() = sp.getString(KEY_BLE_ADDR, null)
+        set(v) = sp.edit().putString(KEY_BLE_ADDR, v).apply()
+
+    /**
      * Last position seq this client has received, per node. Survives a restart so
      * reopening the app resumes a delta instead of re-streaming an hour — and it
      * is keyed by URL because a cursor means nothing on a different node.
@@ -38,9 +52,18 @@ class Prefs(context: Context) {
 
     companion object {
         private const val KEY_ONBOARDED = "onboarded"
+        private const val KEY_TRANSPORT = "transport"
+        private const val KEY_BLE_ADDR = "ble_address"
+
+        const val TRANSPORT_WIFI = "wifi"
+        const val TRANSPORT_BLE = "ble"
         private const val KEY_URL = "node_url"
 
         /** 10.0.2.2 is the emulator's alias for the dev machine running the mock. */
         const val DEFAULT_URL = "ws://10.0.2.2:8787"
+
+        /** The real node: its SoftAP hands out 192.168.4.1, and the server lives
+         *  at /ws (firmware/main/net_ws.c). Join the "lokalgrid" WiFi first. */
+        const val NODE_URL = "ws://192.168.4.1/ws"
     }
 }

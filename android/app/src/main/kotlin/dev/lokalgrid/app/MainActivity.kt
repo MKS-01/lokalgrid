@@ -22,11 +22,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.lokalgrid.app.loc.PhoneLocation
+import dev.lokalgrid.app.net.BleClient
+import dev.lokalgrid.app.net.WifiBinding
 import dev.lokalgrid.app.onboarding.OnboardingScreen
 import dev.lokalgrid.app.ui.AppShell
 import dev.lokalgrid.app.ui.BOOT_GRACE_MS
 import dev.lokalgrid.app.ui.BootScreen
 import dev.lokalgrid.app.ui.theme.Lg
+import org.maplibre.android.MapLibre
 import kotlinx.coroutines.delay
 
 /** Where the app is in its own startup, as a state rather than a guess. */
@@ -40,10 +43,22 @@ class MainActivity : ComponentActivity() {
         setTheme(R.style.Theme_Lokalgrid)
         enableEdgeToEdge()
 
+        // MapLibre has to be initialised before *anything* touches its file
+        // source — the offline manager does, and it is built by the Map screen
+        // before the map view itself gets a chance to call this. Doing it here,
+        // once, is the only place that is unambiguously early enough.
+        MapLibre.getInstance(applicationContext)
+
         val prefs = Prefs(this)
         // One source per process, held by the application context: the fixes belong
         // to the phone, not to whichever node the ViewModel is currently keyed on.
         val gps = PhoneLocation(this)
+        // One binding per process: it watches for the WiFi network the node's
+        // SoftAP provides, so each socket can be pinned to it.
+        val binding = WifiBinding(this)
+        // The BLE transport. One per process, like the others — a GATT client that
+        // gets rebuilt per screen would leak connections.
+        val ble = BleClient(this)
 
         setContent {
             // Fixed dark scheme from the master-plan palette — not dynamic colour;
@@ -60,6 +75,10 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(Lg.Paper)) {
                     var route by remember { mutableStateOf(Route.BOOT) }
                     var url by remember { mutableStateOf(prefs.nodeUrl) }
+                    // Changing transport rebuilds the session, exactly like changing
+                    // node: a new wire is a new connection, never a relabelled one.
+                    var transport by remember { mutableStateOf(prefs.transport) }
+                    var bleAddress by remember { mutableStateOf(prefs.bleAddress) }
 
                     LaunchedEffect(Unit) {
                         if (!prefs.onboarded) route = Route.ONBOARDING
@@ -76,9 +95,12 @@ class MainActivity : ComponentActivity() {
                         // the old connection running under a new label. The socket
                         // opens here, *under* the boot screen — so the splash is
                         // covering real work rather than padding a timer.
-                        key(url) {
-                            val vm: LiveViewModel =
-                                viewModel(factory = LiveViewModelFactory(url, prefs, gps))
+                        key(url, transport, bleAddress) {
+                            val vm: LiveViewModel = viewModel(
+                                factory = LiveViewModelFactory(
+                                    url, prefs, gps, binding, ble, transport, bleAddress,
+                                )
+                            )
                             val state by vm.state.collectAsStateWithLifecycle()
 
                             // Hold the boot screen until the first connection attempt
@@ -117,6 +139,17 @@ class MainActivity : ComponentActivity() {
                                     // app, so the GPS flow is rebuilt on demand rather
                                     // than trusted from startup.
                                     onLocationChanged = vm::watchGps,
+                                    ble = ble,
+                                    onUseBle = { address ->
+                                        prefs.bleAddress = address
+                                        prefs.transport = Prefs.TRANSPORT_BLE
+                                        bleAddress = address
+                                        transport = Prefs.TRANSPORT_BLE
+                                    },
+                                    onUseWifi = {
+                                        prefs.transport = Prefs.TRANSPORT_WIFI
+                                        transport = Prefs.TRANSPORT_WIFI
+                                    },
                                 )
                             }
                         }
@@ -136,6 +169,10 @@ private class LiveViewModelFactory(
     private val url: String,
     private val prefs: Prefs,
     private val gps: PhoneLocation,
+    private val binding: WifiBinding,
+    private val ble: BleClient,
+    private val transport: String,
+    private val bleAddress: String?,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = LiveViewModel(
@@ -143,5 +180,9 @@ private class LiveViewModelFactory(
         savedCursor = prefs.posCursor(url),
         onCursor = { prefs.setPosCursor(url, it) },
         gps = gps,
+        binding = binding,
+        ble = ble,
+        transport = transport,
+        bleAddress = bleAddress,
     ) as T
 }
