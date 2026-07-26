@@ -124,9 +124,12 @@ private const val TRACK_KEEP = 1500
 private const val MY_FIX_MAX_AGE_S = 120L
 
 class LiveViewModel(
-    private val url: String = DEFAULT_URL,
-    private val savedCursor: Long = 0,
-    private val onCursor: (Long) -> Unit = {},
+    url: String = DEFAULT_URL,
+    /** The position cursor saved for a given node, looked up rather than passed:
+     *  the target can change while this ViewModel lives, and a cursor means
+     *  nothing on a different node. */
+    private val cursorFor: (String) -> Long = { 0 },
+    private val onCursor: (String, Long) -> Unit = { _, _ -> },
     private val gps: PhoneLocation? = null,
     /** Pins the socket to the WiFi the node is on; null falls back to whatever
      *  route Android picks, which is fine for the mock and wrong for a SoftAP. */
@@ -135,15 +138,23 @@ class LiveViewModel(
     private val ble: BleClient? = null,
     /** "wifi" or "ble". The session is identical either way (§3): only the bytes
      *  travel differently, so nothing above this layer changes. */
-    private val transport: String = "wifi",
-    private val bleAddress: String? = null,
+    transport: String = "wifi",
+    bleAddress: String? = null,
 ) : ViewModel() {
 
-    private val client = NodeClient(url, binding)
+    /* Where this session is pointed. **Not** constructor-final, because the user
+     * changes it from inside the running app — picks a node out of a BLE scan,
+     * edits the URL in setup — and a session that can only be re-aimed by
+     * restarting the process is not a session, it is a startup argument. */
+    private var url: String = url
+    private var transport: String = transport
+    private var bleAddress: String? = bleAddress
+
+    private var client = NodeClient(this.url, binding)
     private val useBle: Boolean get() = transport == "ble" && bleAddress != null && ble != null
 
     private val _state = MutableStateFlow(
-        LiveState(url = url, posCursor = savedCursor, transport = transport)
+        LiveState(url = this.url, posCursor = cursorFor(this.url), transport = this.transport)
     )
     val state: StateFlow<LiveState> = _state.asStateFlow()
 
@@ -153,7 +164,7 @@ class LiveViewModel(
     private var rowCounter = 0L
     private fun nextRowId(): Long = ++rowCounter
 
-    private var lastSaved = savedCursor
+    private var lastSaved = _state.value.posCursor
     private var link: Job? = null
     private var gpsJob: Job? = null
 
@@ -174,8 +185,65 @@ class LiveViewModel(
 
     override fun onCleared() {
         binding?.onChanged = null
-        onCursor(_state.value.posCursor)
+        onCursor(url, _state.value.posCursor)
         super.onCleared()
+    }
+
+    /**
+     * Point this session at a different node, or at the same node over a
+     * different wire.
+     *
+     * This exists because the obvious alternative does not work: a `key()` block
+     * around `viewModel()` rebuilds the *composition*, not the ViewModel —
+     * `ViewModelProvider` looks the instance up by class name and hands back the
+     * cached one, factory and all its new arguments ignored. The app therefore
+     * kept talking over the old transport until the process was killed, which is
+     * the same class of bug as a socket that never retries: the user does the
+     * right thing and the app quietly does not.
+     *
+     * Changing the **wire** keeps everything — a client is a client whichever
+     * wire it arrived on (§2), the node is the same node, and the cursor is
+     * restated on the next `hello` anyway. Changing the **node** clears what the
+     * old one was authoritative about (roster, chat, track, stats) and loads that
+     * node's own cursor, because none of it means anything on a different node.
+     * What survives either way is the phone's own GPS: those fixes belong to the
+     * phone, not to whatever it is currently talking to.
+     */
+    fun retarget(url: String, transport: String, bleAddress: String?) {
+        if (url == this.url && transport == this.transport && bleAddress == this.bleAddress) return
+
+        val nodeChanged = url != this.url
+        // Save under the *old* url before moving: the cursor belongs to the node
+        // it was counted against.
+        onCursor(this.url, _state.value.posCursor)
+
+        link?.cancel()
+        this.url = url
+        this.transport = transport
+        this.bleAddress = bleAddress
+        if (nodeChanged) client = NodeClient(url, binding)
+
+        _state.value = if (nodeChanged) {
+            LiveState(
+                url = url,
+                transport = transport,
+                posCursor = cursorFor(url),
+                status = "switching to $url…",
+                // The phone's own position is not the node's to hand over.
+                gps = _state.value.gps,
+                myFix = _state.value.myFix,
+                fineLocation = _state.value.fineLocation,
+            )
+        } else {
+            _state.value.copy(
+                connected = false,
+                transport = transport,
+                bleMtu = 0,
+                status = "switching to $transport…",
+            )
+        }
+        lastSaved = _state.value.posCursor
+        connect()
     }
 
     /**
@@ -242,7 +310,7 @@ class LiveViewModel(
                     // any drift.
                     if (next.posCursor - lastSaved >= 30) {
                         lastSaved = next.posCursor
-                        onCursor(next.posCursor)
+                        onCursor(url, next.posCursor)
                     }
                 }
                 // The flow ended, which means the socket failed or closed. Round
@@ -262,7 +330,12 @@ class LiveViewModel(
      * the whole reason the app does not need to gate itself behind a live link.
      */
     fun reconnect() {
-        _state.value = _state.value.copy(connected = false, status = "reconnecting to $url…")
+        // Name the wire, not just the URL: over BLE the URL is not what is being
+        // reconnected to, and "reconnecting to ws://…" while on BLE is a lie.
+        _state.value = _state.value.copy(
+            connected = false,
+            status = "reconnecting over ${if (useBle) "ble to $bleAddress" else "wifi to $url"}…",
+        )
         connect()
     }
 
@@ -425,7 +498,8 @@ class LiveViewModel(
         is NodeFrame.BacklogChunk -> s.copy(posCursor = f.cursor, backlogRemaining = f.remaining)
 
         is NodeFrame.BacklogDone -> {
-            onCursor(f.cursor)
+            onCursor(url, f.cursor)
+            lastSaved = f.cursor
             s.copy(posCursor = f.cursor, catchingUp = false, backlogRemaining = 0)
         }
 

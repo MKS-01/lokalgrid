@@ -12,6 +12,14 @@ Two more things were wrong for the same reason. `p->mtu` at GAP connect is 23, s
 
 Not yet run against the board — the ESP-IDF toolchain is not installed on this machine, so the firmware half is reviewed but not compiled. The Kotlin half compiles and the golden vectors still reproduce. Verifying it on hardware is still the next thing.
 
+**And the reason the app needed force-stopping after picking a node.** Reported as "is this a bug or is a restart mandatory?" — a bug, and a good question to have asked, because the symptom points at the wrong layer: it works after a kill, which reads like something cached that ought to be invalidated.
+
+`MainActivity` wrapped the session in `key(url, transport, bleAddress) { viewModel(factory = …) }`, on the stated intention that a new target builds a new ViewModel and a new socket. It does not. **`key()` keys the composition; `ViewModelProvider` keys the instance by class name** and, finding one already in the Activity's store, hands it back and never calls the factory. So the newly chosen transport and BLE address went into `Prefs` and into the composition, and the running session — the only thing that opens sockets — carried on exactly as before. Force-stopping cleared the store, and the new values were read back from `Prefs` at startup, which is why a restart "fixed" it.
+
+Rebuilding it per target does not work either: a `ViewModelStore` has no public per-key removal, so keying the *instance* would leave every previous session alive with its retry loop running — two wires connected at once, which is worse than the bug. So the session is one long-lived object that can be **re-aimed**: `LiveViewModel.retarget(url, transport, bleAddress)` cancels the link, repoints it and reconnects. Changing the **wire** keeps everything, because a client is a client whichever wire it arrived on (§2) and the cursor is restated on the next `hello` anyway. Changing the **node** clears what the old one was authoritative about — roster, chat, track, stats — and loads that node's own saved cursor. The phone's own GPS survives both: those fixes belong to the phone, not to whatever it is currently talking to. The cursor is now looked up per node rather than captured at construction, for the same reason.
+
+Worth noting what these two bugs have in common with yesterday's socket-that-never-retried: in all three the user does the right thing, the UI acknowledges it, and one layer down nothing happens — no error, no log, nothing to search for. The app is honest about the node; it has to be equally honest about itself.
+
 ## 2026-07-26 (late) — a real fix from the real board, and proto 2 over two wires
 
 **The headline: the T-Beam reported its own position.**

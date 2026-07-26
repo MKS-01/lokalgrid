@@ -12,7 +12,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -90,68 +89,76 @@ class MainActivity : ComponentActivity() {
                             route = Route.BOOT
                         }
                     } else {
-                        // Keyed on the URL: changing which node to talk to builds a
-                        // new ViewModel and a new socket, instead of quietly leaving
-                        // the old connection running under a new label. The socket
-                        // opens here, *under* the boot screen — so the splash is
-                        // covering real work rather than padding a timer.
-                        key(url, transport, bleAddress) {
-                            val vm: LiveViewModel = viewModel(
-                                factory = LiveViewModelFactory(
-                                    url, prefs, gps, binding, ble, transport, bleAddress,
-                                )
+                        // One ViewModel for the process, re-aimed when the target
+                        // changes. It cannot be *rebuilt* per target: `key()` keys
+                        // the composition, while `viewModel()` looks its instance up
+                        // in the Activity's store by class name and returns the
+                        // cached one — factory and new arguments ignored. Wrapping
+                        // this in `key(url, transport, bleAddress)` therefore did
+                        // nothing at all, and picking a node over BLE only took
+                        // effect after the app was force-stopped.
+                        val vm: LiveViewModel = viewModel(
+                            factory = LiveViewModelFactory(
+                                url, prefs, gps, binding, ble, transport, bleAddress,
                             )
-                            val state by vm.state.collectAsStateWithLifecycle()
+                        )
+                        val state by vm.state.collectAsStateWithLifecycle()
 
-                            // Hold the boot screen until the first connection attempt
-                            // resolves, or the grace period runs out. A node that is
-                            // down costs you a second, never the app.
-                            LaunchedEffect(url, state.connected) {
-                                if (state.connected) {
-                                    route = Route.RUNNING
-                                } else if (route == Route.BOOT) {
-                                    delay(BOOT_GRACE_MS)
-                                    route = Route.RUNNING
-                                }
-                            }
+                        // The change of target, applied where it can actually reach
+                        // the running session. No-op on first composition, since the
+                        // ViewModel was just built with exactly these values.
+                        LaunchedEffect(url, transport, bleAddress) {
+                            vm.retarget(url, transport, bleAddress)
+                        }
 
-                            if (route == Route.BOOT) {
-                                val failed = !state.connected && state.status.startsWith("error")
-                                BootScreen(
-                                    url = url,
-                                    status = if (failed) state.status else "opening the link…",
-                                    failed = failed,
-                                )
-                            } else {
-                                AppShell(
-                                    state = state,
-                                    onSendChat = vm::sendChat,
-                                    onSharePosition = vm::shareMyPosition,
-                                    onRename = vm::setName,
-                                    onResetTrack = vm::resetTrack,
-                                    onWriteConfig = vm::writeConfig,
-                                    onReopenSetup = {
-                                        prefs.onboarded = false
-                                        route = Route.ONBOARDING
-                                    },
-                                    onReconnect = vm::reconnect,
-                                    // Location can be granted or revoked outside the
-                                    // app, so the GPS flow is rebuilt on demand rather
-                                    // than trusted from startup.
-                                    onLocationChanged = vm::watchGps,
-                                    ble = ble,
-                                    onUseBle = { address ->
-                                        prefs.bleAddress = address
-                                        prefs.transport = Prefs.TRANSPORT_BLE
-                                        bleAddress = address
-                                        transport = Prefs.TRANSPORT_BLE
-                                    },
-                                    onUseWifi = {
-                                        prefs.transport = Prefs.TRANSPORT_WIFI
-                                        transport = Prefs.TRANSPORT_WIFI
-                                    },
-                                )
+                        // Hold the boot screen until the first connection attempt
+                        // resolves, or the grace period runs out. A node that is
+                        // down costs you a second, never the app.
+                        LaunchedEffect(url, state.connected) {
+                            if (state.connected) {
+                                route = Route.RUNNING
+                            } else if (route == Route.BOOT) {
+                                delay(BOOT_GRACE_MS)
+                                route = Route.RUNNING
                             }
+                        }
+
+                        if (route == Route.BOOT) {
+                            val failed = !state.connected && state.status.startsWith("error")
+                            BootScreen(
+                                url = url,
+                                status = if (failed) state.status else "opening the link…",
+                                failed = failed,
+                            )
+                        } else {
+                            AppShell(
+                                state = state,
+                                onSendChat = vm::sendChat,
+                                onSharePosition = vm::shareMyPosition,
+                                onRename = vm::setName,
+                                onResetTrack = vm::resetTrack,
+                                onWriteConfig = vm::writeConfig,
+                                onReopenSetup = {
+                                    prefs.onboarded = false
+                                    route = Route.ONBOARDING
+                                },
+                                onReconnect = vm::reconnect,
+                                // Location can be granted or revoked outside the
+                                // app, so the GPS flow is rebuilt on demand rather
+                                // than trusted from startup.
+                                onLocationChanged = vm::watchGps,
+                                ble = ble,
+                                onUseBle = { address ->
+                                    prefs.bleAddress = address
+                                    prefs.transport = Prefs.TRANSPORT_BLE
+                                    bleAddress = address
+                                    transport = Prefs.TRANSPORT_BLE
+                                },
+                                onUseWifi = {
+                                    prefs.transport = Prefs.TRANSPORT_WIFI
+                                    transport = Prefs.TRANSPORT_WIFI
+                                },
+                            )
                         }
                     }
                 }
@@ -161,9 +168,15 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Hands the chosen node URL to the ViewModel, along with the position cursor
- * saved for *that* node — so reopening the app resumes a delta rather than
- * re-streaming everything, and switching nodes cannot carry a cursor across.
+ * Hands the chosen node URL to the ViewModel, along with the means to read and
+ * write the position cursor *per node* — so reopening the app resumes a delta
+ * rather than re-streaming everything, and switching nodes cannot carry a cursor
+ * across. The cursor is looked up rather than passed because the ViewModel
+ * outlives any one target (see `LiveViewModel.retarget`).
+ *
+ * Used only when the ViewModel is first created; every later change of target
+ * goes through `retarget`, because `ViewModelProvider` never calls a factory for
+ * an instance it already holds.
  */
 private class LiveViewModelFactory(
     private val url: String,
@@ -177,8 +190,8 @@ private class LiveViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = LiveViewModel(
         url = url,
-        savedCursor = prefs.posCursor(url),
-        onCursor = { prefs.setPosCursor(url, it) },
+        cursorFor = { prefs.posCursor(it) },
+        onCursor = { node, seq -> prefs.setPosCursor(node, seq) },
         gps = gps,
         binding = binding,
         ble = ble,

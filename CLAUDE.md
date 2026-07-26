@@ -30,6 +30,8 @@ When a decision changes, record it in PROJECT.md **and** update whatever the spe
 
 The app is **not gated behind a live connection** — the Link screen (tap the status bar) shows permissions · wifi · ble · session as a flow, but every tab stays readable offline and reconnecting resumes from the cursor. The socket now retries by itself with bounded backoff and reconnects the moment the WiFi changes; do not add a connect gate.
 
+**One session, re-aimed — never rebuilt** *(2026-07-27)*: there is exactly one `LiveViewModel` for the process, and changing node or transport goes through `retarget()`. Do not wrap `viewModel()` in `key()` to get a fresh one — `key()` keys the composition while `ViewModelProvider` keys the instance by class name, so the factory is never called and the change silently does nothing until the app is force-stopped. Per-key instances leak instead, since a `ViewModelStore` has no per-key removal.
+
 ## Product framing — a modern walkie-talkie *(2026-07-25)*
 
 Encrypted text for whoever is inside the building or within radio range of the node. **Metaphor, not voice** — media is still rejected. Two decisions follow, both recorded in PROJECT.md §2:
