@@ -2,7 +2,13 @@ idf_component_register(
     SRCS
         "main.c"
         "board.c"
+        "axp2101.c"
         "oled.c"
+        "record.c"
+        "net_ws.c"
+        "session.c"
+        "gnss.c"
+        "ble_gatt.c"
         "wifi_ap.c"
         "ble_adv.c"
     INCLUDE_DIRS "."
@@ -12,6 +18,7 @@ idf_component_register(
         esp_netif
         esp_timer
         esp_wifi
+        esp_http_server
         nvs_flash
         bt              # NimBLE
 )

@@ -53,10 +53,30 @@ static void note(lg_board_t *out, uint8_t addr, uint8_t bus)
     }
 }
 
-/* Bring one bus up and sweep it. A bus that will not start, or answers with
- * nothing, is a diagnosis to log rather than a reason to fail boot (§8). */
-static i2c_master_bus_handle_t scan_bus(lg_board_t *out, uint8_t port, int sda, int scl)
+/* Bring one bus up — or reuse the one already up — and sweep it.
+ *
+ * The reuse matters: this is called again after switching a power rail, to see
+ * whether anything new appeared, and creating the same bus twice returns
+ * ESP_ERR_INVALID_STATE *and* leaves the existing handle unusable. The symptom
+ * was the display going dead on the second scan, which looks nothing like the
+ * cause. A bus that will not start, or answers with nothing, is still a diagnosis
+ * to log rather than a reason to fail boot (§8). */
+static i2c_master_bus_handle_t scan_bus(lg_board_t *out, uint8_t port, int sda, int scl,
+                                        i2c_master_bus_handle_t existing)
 {
+    if (existing) {
+        ESP_LOGI(TAG, "re-scanning i2c%u (sda=%d scl=%d)", port, sda, scl);
+        uint8_t found = 0;
+        for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+            if (i2c_master_probe(existing, addr, PROBE_TIMEOUT_MS) == ESP_OK) {
+                note(out, addr, port);
+                found++;
+            }
+        }
+        if (found == 0) ESP_LOGW(TAG, "i2c%u: nothing answered", port);
+        return existing;
+    }
+
     i2c_master_bus_config_t cfg = {
         .i2c_port = port,
         .sda_io_num = sda,
@@ -94,8 +114,8 @@ bool board_scan_i2c(lg_board_t *out)
     out->oled_bus = 0xff;
     out->pmu_bus = 0xff;
 
-    s_bus0 = scan_bus(out, LG_I2C_PORT, LG_I2C_SDA, LG_I2C_SCL);
-    s_bus1 = scan_bus(out, LG_I2C1_PORT, LG_I2C1_SDA, LG_I2C1_SCL);
+    s_bus0 = scan_bus(out, LG_I2C_PORT, LG_I2C_SDA, LG_I2C_SCL, s_bus0);
+    s_bus1 = scan_bus(out, LG_I2C1_PORT, LG_I2C1_SDA, LG_I2C1_SCL, s_bus1);
 
     return s_bus0 != NULL || s_bus1 != NULL;
 }

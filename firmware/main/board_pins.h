@@ -40,9 +40,20 @@
 #define LG_ADDR_BME280_L  0x76     /* absent on some variants — sentinels, never a shrink (§4) */
 #define LG_ADDR_BME280_H  0x77
 
+/* ── GNSS on UART1 — verified 2026-07-26 ─────────────────────────────────────
+ * Found by probing rather than trusting: the receiver answered NMEA on rx=9
+ * tx=8 at 9600 baud, on the first candidate pair. It needs **ALDO4** switched on
+ * first (the PMU leaves that rail programmed at 3.3 V and off), which is why a
+ * receiver that appears dead is a power question before it is a pin question.
+ */
+#define LG_GNSS_RX        9
+#define LG_GNSS_TX        8
+#define LG_GNSS_BAUD      9600
+#define LG_GNSS_RAIL      4      /* ALDO4, by axp_enable_rail's 1-based index */
+
 /* ── Not yet brought up ──────────────────────────────────────────────────────
- * GNSS (UART1), SX1262 (SPI2), microSD (SPI3) and the user button arrive with
- * the phase that uses them. The SX1262 in particular must not get pin
- * definitions before the antenna flag exists: no TX path can be reachable by
- * accident (§1 hardware safety rule 1).
+ * SX1262 (SPI2), microSD (SPI3) and the user button arrive with the phase that
+ * uses them. The SX1262 in particular must not get pin definitions before the
+ * antenna flag exists: no TX path can be reachable by accident (§1 hardware
+ * safety rule 1).
  */

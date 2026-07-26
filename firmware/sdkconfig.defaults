@@ -43,6 +43,12 @@ CONFIG_LWIP_DHCPS_MAX_STATION_NUM=10
 # HTTP server with WebSocket
 CONFIG_HTTPD_WS_SUPPORT=y
 
+# esp_http_server refuses to start unless max_open_sockets <= LWIP sockets - 3,
+# and the default LWIP ceiling of 10 therefore caps it at 7 — below the 9-client
+# cap (§3). 16 is the LWIP maximum. Found the honest way: httpd_start() returned
+# ESP_ERR_INVALID_ARG on the first boot with the server in it.
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # Watchdog — names the offending task rather than just rebooting (§5)
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 

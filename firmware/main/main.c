@@ -23,8 +23,13 @@
 #include "esp_system.h"
 #include "nvs_flash.h"
 
+#include "axp2101.h"
 #include "ble_adv.h"
 #include "board.h"
+#include "board_pins.h"
+#include "gnss.h"
+#include "net_ws.h"
+#include "session.h"
 #include "oled.h"
 #include "wifi_ap.h"
 
@@ -73,6 +78,37 @@ void app_main(void)
         board_report(&board);
     }
 
+    /* Read the PMU before anything else asks it for power: which rails are on is
+     * the evidence needed before switching any of them, and the power *source*
+     * decides what the display can honestly claim. */
+    static lg_pmu_t pmu;
+    if (board.pmu && axp_read(board.pmu_bus, &pmu)) {
+        axp_report(&pmu);
+    }
+
+    /* ALDO4 is programmed for 3.3 V and switched off — the signature of a rail
+     * the factory firmware turns on when it wants the peripheral. GNSS and the
+     * SX1262 are what hang off these, so switching it on and looking is how the
+     * map gets settled. Only the enable bit is written; no voltage is touched. */
+    if (pmu.present) {
+        uint8_t after = 0;
+        if (axp_enable_rail(LG_GNSS_RAIL, &after)) {
+            /* Give the receiver a moment to come up before asking it anything. */
+            vTaskDelay(pdMS_TO_TICKS(300));
+            lg_board_t again;
+            if (board_scan_i2c(&again)) {
+                if (again.imu && !board.imu) {
+                    ESP_LOGI(TAG, "the QMI8658 appeared once ldo4 came on — it was "
+                                  "behind the rail, not absent");
+                } else if (!again.imu) {
+                    ESP_LOGI(TAG, "still no QMI8658 with ldo4 on — this variant "
+                                  "does not have one, or it is on another rail");
+                }
+                board = again;
+            }
+        }
+    }
+
     /* The screen comes up before the network so it is never blank while
      * something is still happening — the same rule as the app's boot screen. */
     oled_init(board.oled_bus);
@@ -87,12 +123,46 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(wifi_ap_start(LG_AP_REASON_BOOT));
 
+    /* The app that was built against the mock node talks to this: same proto 2,
+     * same frames, real hardware underneath. Only the URL changes.
+     *
+     * Not ESP_ERROR_CHECK: a server that will not start must cost the node its
+     * WebSocket and say so, not reboot forever. The PSRAM boot loop earlier today
+     * was exactly this mistake made by the SDK's default. */
+    /* GNSS after the rail, before the session: a fix that exists at the first tick
+     * is a record logged as real rather than a synthetic one nobody wanted. */
+    if (!gnss_start()) {
+        ESP_LOGW(TAG, "no GNSS — records stay synthetic and every client is told so "
+                      "in hello.mode");
+    }
+
+    esp_err_t sess = lg_session_init();
+    if (sess != ESP_OK) {
+        ESP_LOGE(TAG, "session would not start: %s", esp_err_to_name(sess));
+    }
+    esp_err_t ws = net_ws_start();
+    if (ws != ESP_OK) {
+        ESP_LOGE(TAG, "no websocket (%s) — the phone app cannot attach; "
+                      "BLE and the display still work", esp_err_to_name(ws));
+    }
+
     /* Heartbeat. Says what is *true* rather than that it is alive: which
      * transports are up, how many phones are attached, and how much heap is
      * left, since the backlog buffers and tile serving live in that number. */
     uint32_t up_s = 0;
     while (true) {
         const uint8_t stations = wifi_ap_stations();
+        {
+            uint32_t nm = 0, fx = 0;
+            gnss_counters(&nm, &fx);
+            if (nm > 0 && fx == 0) {
+                /* Alive and searching is a state worth naming: a cold start with no
+                 * ephemeris is a minute outdoors and forever indoors, and this node
+                 * has no backup rail to keep the almanac (USB power, no cell). */
+                ESP_LOGI(TAG, "gnss: %lu sentences, no fix yet — needs sky view",
+                         (unsigned long)nm);
+            }
+        }
         ESP_LOGI(TAG, "ap %s · %u station%s · ble %s · heap %lu",
                  wifi_ap_is_up() ? "up" : "down",
                  stations,
@@ -118,10 +188,22 @@ void app_main(void)
         }
         snprintf(l_ble, sizeof(l_ble), "ble   %s",
                  ble_adv_is_advertising() ? "advertising" : "quiet");
-        snprintf(l_up, sizeof(l_up), "up    %lum  gnss --",
-                 (unsigned long)(up_s / 60));
+        uint32_t nmea = 0, fixes = 0;
+        gnss_counters(&nmea, &fixes);
+        snprintf(l_up, sizeof(l_up), "up %lum  gnss %s",
+                 (unsigned long)(up_s / 60),
+                 net_ws_gnss_live() ? "fix" : (nmea > 0 ? "no fix" : "--"));
 
-        const char *lines[] = { "lokalgrid", l_ssid, l_wifi, l_ble, l_up, "no phone needed" };
+        char l_ws[32];
+        snprintf(l_ws, sizeof(l_ws), "ws    %u client%s %s", net_ws_clients(),
+                 net_ws_clients() == 1 ? "" : "s", net_ws_gnss_live() ? "" : "synth");
+
+        /* Power is a *source*, not a percentage: this node runs from USB, so a
+         * battery figure would be invented. The line says which it is. */
+        char l_pwr[32];
+        axp_power_label(&pmu, l_pwr, sizeof(l_pwr));
+
+        const char *lines[] = { "lokalgrid", l_wifi, l_ble, l_ws, l_pwr, l_up };
         oled_lines(lines, 6);
 
         vTaskDelay(pdMS_TO_TICKS(5000));
