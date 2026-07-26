@@ -33,7 +33,10 @@ static const ble_uuid128_t CHR_DATA     = UUID128_LG(0x03);
 typedef struct {
     bool     used;
     uint16_t conn;
-    int      id;          /* session client id */
+    int      id;          /* session client id, valid only while `joined` */
+    bool     joined;      /* in the session — see ble_gatt_on_subscribe */
+    bool     sub_control;
+    bool     sub_data;
     uint16_t mtu;
     uint16_t chunk_seq;
 } peer_t;
@@ -70,7 +73,7 @@ static uint16_t crc16_ccitt(const uint8_t *data, size_t len)
 static esp_err_t tx_text(void *ctx, const char *text)
 {
     peer_t *p = (peer_t *)ctx;
-    if (!p || !p->used) return ESP_FAIL;
+    if (!p || !p->used || !p->sub_control) return ESP_FAIL;
 
     /* Control frames are sent whole. A frame longer than the negotiated MTU
      * cannot be notified in one go, and rather than invent a second chunking
@@ -94,7 +97,7 @@ static esp_err_t tx_text(void *ctx, const char *text)
 static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
 {
     peer_t *p = (peer_t *)ctx;
-    if (!p || !p->used) return ESP_FAIL;
+    if (!p || !p->used || !p->sub_data) return ESP_FAIL;
 
     /* §4 chunk framing. `N = negotiated_mtu - 9` is the payload budget: 3 bytes
      * of ATT overhead plus this 6-byte header. Whole records only, so a chunk
@@ -150,6 +153,12 @@ static int on_control_write(uint16_t conn, struct ble_gatt_access_ctxt *ctxt)
 {
     peer_t *p = peer_by_conn(conn);
     if (!p) return BLE_ATT_ERR_UNLIKELY;
+    if (!p->joined) {
+        /* `p->id` means nothing until the join, and handing a stale one to the
+         * session would put this frame in another client's mouth. */
+        ESP_LOGW(TAG, "conn %u wrote before subscribing — frame refused", conn);
+        return BLE_ATT_ERR_UNLIKELY;
+    }
 
     uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
     if (len == 0 || len > 1024) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
@@ -211,7 +220,10 @@ void ble_gatt_on_connect(uint16_t conn, uint16_t mtu)
         if (!s_peers[i].used) { p = &s_peers[i]; break; }
     }
     if (!p) {
-        ESP_LOGW(TAG, "no room for another BLE client");
+        /* Refuse with a reason rather than leaving a connection nothing will ever
+         * answer — a link that opens and stays mute is the worst of both (§3). */
+        ESP_LOGW(TAG, "no room for another BLE client — terminating conn %u", conn);
+        ble_gap_terminate(conn, BLE_ERR_REM_USER_CONN_TERM);
         return;
     }
     memset(p, 0, sizeof(*p));
@@ -219,24 +231,56 @@ void ble_gatt_on_connect(uint16_t conn, uint16_t mtu)
     p->conn = conn;
     p->mtu = mtu ? mtu : 23;
 
+    /* No session join here: nothing can be *sent* to this client yet. It joins
+     * once it has subscribed — see ble_gatt_on_subscribe. */
+    ESP_LOGI(TAG, "conn %u attached, mtu %u — waiting for it to subscribe", conn, p->mtu);
+}
+
+void ble_gatt_on_subscribe(uint16_t conn, uint16_t attr_handle, bool notify)
+{
+    peer_t *p = peer_by_conn(conn);
+    if (!p) return;
+
+    if (attr_handle == s_control_val_handle)   p->sub_control = notify;
+    else if (attr_handle == s_data_val_handle) p->sub_data = notify;
+    else return;
+
+    if (p->joined) {
+        /* Dropping either subscription makes this client unreachable on that half
+         * of the protocol, so it is a departure, not a degraded mode. */
+        if (!p->sub_control || !p->sub_data) {
+            ESP_LOGI(TAG, "conn %u unsubscribed — leaving the session", conn);
+            lg_session_leave(p->id);
+            p->joined = false;
+        }
+        return;
+    }
+
+    if (!p->sub_control || !p->sub_data) {
+        ESP_LOGI(TAG, "conn %u subscribed to %s — waiting for the other", conn,
+                 p->sub_control ? "control" : "data");
+        return;
+    }
+
     /* The session decides whether there is room across *all* transports: the cap
      * is min(NimBLE, SoftAP) and a phone holds both (§3). */
     int id = lg_session_join(&BLE_TX, p);
     if (id < 0) {
-        p->used = false;
         ESP_LOGW(TAG, "session full — dropping conn %u", conn);
+        p->used = false;
         ble_gap_terminate(conn, BLE_ERR_REM_USER_CONN_TERM);
         return;
     }
     p->id = id;
-    ESP_LOGI(TAG, "ble client %d on conn %u, mtu %u", id, conn, p->mtu);
+    p->joined = true;
+    ESP_LOGI(TAG, "ble client %d on conn %u, mtu %u — hello on its way", id, conn, p->mtu);
 }
 
 void ble_gatt_on_disconnect(uint16_t conn)
 {
     peer_t *p = peer_by_conn(conn);
     if (!p) return;
-    lg_session_leave(p->id);
+    if (p->joined) lg_session_leave(p->id);
     p->used = false;
 }
 
@@ -271,7 +315,7 @@ bool ble_gatt_init(void)
 uint8_t ble_gatt_clients(void)
 {
     uint8_t n = 0;
-    for (int i = 0; i < MAX_BLE_CLIENTS; i++) if (s_peers[i].used) n++;
+    for (int i = 0; i < MAX_BLE_CLIENTS; i++) if (s_peers[i].used && s_peers[i].joined) n++;
     return n;
 }
 

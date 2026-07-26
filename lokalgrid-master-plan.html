@@ -590,6 +590,7 @@ N = negotiated_mtu - 9
 payload holds <b>whole records only</b>, never split
 crc16 CCITT over seq + len + payload</pre>
     <p>Whole records per chunk wastes a few bytes and eliminates an entire reassembly bug class. Every 32 chunks the client acknowledges its last good sequence number and the node advances the window; on a CRC failure or a gap the client stops acknowledging and re-requests from its last verified offset. A zero-length chunk ends the transfer.</p>
+    <p><b>A BLE client joins the session when it subscribes, not when it connects.</b> A notification to a characteristic with no subscriber has nowhere to go and is discarded, so <code>hello</code>, the config and the roster — all of which the session sends at join — must not be issued before the client's CCCD writes land. The node therefore waits for notifications to be enabled on <b>both</b> characteristics; by then the MTU is negotiated too, so the first chunk is sized from the real value rather than from 23. Losing either subscription is treated as a departure, not a degraded mode.</p>
 
     <h2>Degradation</h2>
     <div class="tw"><table>

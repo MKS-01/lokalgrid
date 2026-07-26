@@ -82,8 +82,9 @@ static int on_gap_event(struct ble_gap_event *event, void *arg)
             return 0;
         }
         s_advertising = false;
-        /* Hand the connection to the session straight away: the client is a
-         * client the moment it is attached, whichever wire it came in on. */
+        /* A connection is not yet a client: nothing can be notified to it until
+         * it subscribes, so the session join waits for BLE_GAP_EVENT_SUBSCRIBE
+         * below. */
         ble_gatt_on_connect(event->connect.conn_handle,
                             ble_att_mtu(event->connect.conn_handle));
         /* Keep advertising with room left — this node serves several phones (§3),
@@ -100,6 +101,16 @@ static int on_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         advertise();
+        return 0;
+
+    case BLE_GAP_EVENT_SUBSCRIBE:
+        /* The event that actually admits a client. Until the CCCD is written
+         * there is nowhere for a notification to go, so `hello` sent any earlier
+         * is simply discarded — which looked, from the phone, like a node that
+         * connects and then says nothing at all. */
+        ble_gatt_on_subscribe(event->subscribe.conn_handle,
+                              event->subscribe.attr_handle,
+                              event->subscribe.cur_notify);
         return 0;
 
     case BLE_GAP_EVENT_MTU:

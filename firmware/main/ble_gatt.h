@@ -32,7 +32,25 @@ void ble_gatt_on_connect(uint16_t conn, uint16_t mtu);
 void ble_gatt_on_disconnect(uint16_t conn);
 void ble_gatt_on_mtu(uint16_t conn, uint16_t mtu);
 
-/** How many BLE clients are attached right now. */
+/**
+ * A client subscribed to, or unsubscribed from, one of the two characteristics.
+ *
+ * **This is what admits a client to the session, not the GAP connection.** A
+ * notification sent to a characteristic nobody has subscribed to goes nowhere:
+ * NimBLE has no one to send it to and drops it. Joining at connect time meant
+ * `hello`, the config and the roster were all issued into that hole, so the app
+ * connected, waited for a `hello` that had already been thrown away, never stated
+ * its cursors, and sat there with a live link and no data.
+ *
+ * So the join waits until **both** characteristics are subscribed: by then the
+ * MTU is negotiated too (the app asks for it first), which means the very first
+ * chunk is sized from the real value rather than from 23.
+ */
+void ble_gatt_on_subscribe(uint16_t conn, uint16_t attr_handle, bool notify);
+
+/** How many BLE clients are attached right now — attached meaning *in the
+ *  session*, so this agrees with the roster and the OLED rather than counting
+ *  connections that are still discovering. */
 uint8_t ble_gatt_clients(void);
 
 /** Negotiated MTU of the most recent connection, for the app's Diagnostics

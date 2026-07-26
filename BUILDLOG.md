@@ -1,5 +1,17 @@
 # Build log
 
+## 2026-07-27 — the BLE link connected and then said nothing
+
+Reviewing the BLE path before testing it against the board turned up the reason it could never have worked, in the one place both halves looked correct on their own.
+
+**The node joined a client to the session on `BLE_GAP_EVENT_CONNECT`.** `lg_session_join()` sends `hello`, the config, the roster and the stats immediately — that is its contract, and over WiFi it is right, because a WebSocket that has completed its handshake can receive. Over BLE it is wrong: at GAP connect the phone has not discovered the service, let alone written a CCCD, so **there is no subscriber and every one of those notifications is discarded**. The app would then have connected, subscribed, and waited for a `hello` that had already been thrown away — and since the app states its cursors *in reply to* `hello` (§3: the client says what it has, the node answers), no records would ever have followed. A live link, no data, and no error at either end.
+
+Two more things were wrong for the same reason. `p->mtu` at GAP connect is 23, so `tx_text` would have refused every frame as "exceeds the 20-byte MTU payload" — and `send_roster(NULL)` broadcasts, where a failed send *drops the client*, which would have torn down the session slot while the BLE peer still held its id. The fix removes both: the join now happens on `BLE_GAP_EVENT_SUBSCRIBE`, once **both** characteristics have notifications enabled, which on Android is strictly after the MTU exchange because the app asks for 517 first. Losing either subscription is a departure rather than a degraded mode, `ble_gatt_clients()` counts clients that are actually in the session rather than connections still discovering, a write that arrives before the join is refused instead of being attributed to whatever `p->id` happened to contain, and a connection arriving with no free slot is terminated with a reason rather than left open and unanswered.
+
+**The app had the mirror-image bug: three ways to hang with no retry.** `requestMtu` returning false means `onMtuChanged` never fires; a missing CCCD descriptor returned early; a failed descriptor write was not checked. In each case nothing subscribed, no callback ever came, the flow never *ended* — and a flow that does not end is invisible to the backoff loop, which is the exact failure mode fixed at the socket layer yesterday, reappearing one wire over. Each of those now either carries on at the default MTU or closes the flow with a named reason. The MTU also resets to 23 per connection, so the UI cannot quote a number this link never agreed to.
+
+Not yet run against the board — the ESP-IDF toolchain is not installed on this machine, so the firmware half is reviewed but not compiled. The Kotlin half compiles and the golden vectors still reproduce. Verifying it on hardware is still the next thing.
+
 ## 2026-07-26 (late) — a real fix from the real board, and proto 2 over two wires
 
 **The headline: the T-Beam reported its own position.**

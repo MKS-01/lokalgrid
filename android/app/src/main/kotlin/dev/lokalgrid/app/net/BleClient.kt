@@ -150,6 +150,10 @@ class BleClient(private val context: Context) {
             return@callbackFlow
         }
 
+        // A fresh link negotiates its own MTU. Carrying the last one over would
+        // have the UI quoting a number this connection never agreed to.
+        mtu = 23
+
         val assembler = ChunkAssembler { record ->
             try {
                 trySend(NodeClient.Event.Fix(TrackRecord.decode(record)))
@@ -180,7 +184,15 @@ class BleClient(private val context: Context) {
                 // MTU first: chunk sizes are computed from the negotiated value on
                 // both sides, so asking after subscribing would race the first
                 // records (§8 — "MTU assumed not read").
-                g.requestMtu(WANT_MTU)
+                //
+                // If the request is refused outright, onMtuChanged never fires —
+                // and subscribing only from there would leave the link open, silent
+                // and un-retried forever, which is the failure this whole path
+                // exists to avoid. Carry on at the default MTU instead and say so.
+                if (!g.requestMtu(WANT_MTU)) {
+                    trySend(NodeClient.Event.Status(false, "mtu request refused — subscribing at $mtu"))
+                    subscribe(g, CHR_CONTROL)
+                }
             }
 
             override fun onMtuChanged(g: BluetoothGatt, newMtu: Int, status: Int) {
@@ -203,11 +215,21 @@ class BleClient(private val context: Context) {
              *  operations silently, which shows up as "notifications work on one
              *  characteristic and not the other". */
             private fun subscribe(g: BluetoothGatt, which: UUID) {
-                val chr = g.getService(SERVICE)?.getCharacteristic(which) ?: return
+                val chr = g.getService(SERVICE)?.getCharacteristic(which)
+                val cccd = chr?.getDescriptor(CCCD)
+                if (chr == null || cccd == null) {
+                    // A service that is missing a characteristic, or a
+                    // characteristic with no CCCD, is not this node's service —
+                    // say which piece is absent rather than waiting on a
+                    // notification that can never arrive.
+                    trySend(NodeClient.Event.Status(false, "no notifications on ${which.toString().takeLast(4)}"))
+                    close()
+                    return
+                }
                 g.setCharacteristicNotification(chr, true)
-                val cccd = chr.getDescriptor(CCCD) ?: return
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ==
+                        BluetoothGatt.GATT_SUCCESS
                 } else {
                     @Suppress("DEPRECATION")
                     run {
@@ -215,18 +237,33 @@ class BleClient(private val context: Context) {
                         g.writeDescriptor(cccd)
                     }
                 }
+                if (!ok) {
+                    trySend(NodeClient.Event.Status(false, "subscribe to ${which.toString().takeLast(4)} was refused"))
+                    close()
+                }
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    // Without both subscriptions the node will not admit us, so a
+                    // failed CCCD write is the end of this attempt — ending the
+                    // flow hands it to the caller's backoff instead of hanging.
+                    trySend(
+                        NodeClient.Event.Status(
+                            false,
+                            "could not subscribe to ${d.characteristic.uuid.toString().takeLast(4)} (status $status)",
+                        )
+                    )
+                    close()
+                    return
+                }
                 when (d.characteristic.uuid) {
                     CHR_CONTROL -> subscribe(g, CHR_DATA)
-                    CHR_DATA -> {
-                        trySend(NodeClient.Event.Status(true, "ble · mtu $mtu"))
-                        // State our cursors the moment both streams are live: the
-                        // client is authoritative about what it has (§3), and the
-                        // node answers rather than assuming.
-                        gatt = g
-                    }
+                    // Both streams are live, which is exactly what the node waits
+                    // for before it joins us to the session and sends `hello`. The
+                    // cursors go up in reply to that (§3 — the client states what
+                    // it has, the node answers), not from here.
+                    CHR_DATA -> trySend(NodeClient.Event.Status(true, "ble · mtu $mtu"))
                 }
             }
 
