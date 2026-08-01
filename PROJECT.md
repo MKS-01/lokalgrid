@@ -528,7 +528,7 @@ Google's agentic Android tools (`developer.android.com/tools/agents`) are the te
 
 Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
-> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §03. Captured 2026-07-25, Phase 02 against the mock.
+> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §03. Captured 2026-07-25, Phase 02 against the mock — **due for recapture**: the Link and Config screens now report BLE as a live transport rather than as an unbuilt phase, and nothing here has been captured against the real board.
 
 ### Local store and crypto *(2026-07-25)*
 
