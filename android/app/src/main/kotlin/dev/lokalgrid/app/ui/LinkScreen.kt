@@ -41,7 +41,9 @@ private enum class StepState(val label: String, val kind: PillKind) {
     DONE("ok", PillKind.OK),
     WORKING("working", PillKind.LORA),
     NEEDS_YOU("needs you", PillKind.WARN),
-    WAITING("phase 03", PillKind.NEUTRAL),
+    /** Not started, and nothing is stopping it — the wire is there, the app is
+     *  just on the other one. Never a phase number: the step reads as unbuilt. */
+    WAITING("not in use", PillKind.NEUTRAL),
 }
 
 /**
@@ -150,26 +152,39 @@ fun LinkScreen(
             LgButton("Open battery settings") { Setup.openBatterySettings(context) }
         }
 
-        // 2 ─ wifi / websocket, the transport that works today
+        // 2 ─ wifi / websocket. **An alternative to step 3, not a step before it.**
+        // The two wires carry the same session, so exactly one is in use at a
+        // time; a phone on BLE is on its own home WiFi with internet and never
+        // joins the node's AP at all. Showing this as "needs you" while BLE is
+        // connected would report a failure that is not happening.
+        val onWifi = state.transport != "ble"
         Step(
             n = 2,
             title = "wifi · websocket",
             state = when {
-                state.connected -> StepState.DONE
-                else -> StepState.NEEDS_YOU
+                onWifi && state.connected -> StepState.DONE
+                onWifi -> StepState.NEEDS_YOU
+                else -> StepState.WAITING
             },
-            detail = state.url,
+            detail = if (onWifi) state.url else "not in use — this session is over ble",
         )
-        InfoRow("status", state.status)
-        if (!state.connected) {
-            Note("The node must be running and on the same network. 10.0.2.2 resolves only on an emulator.")
-        }
-        Row(Modifier.fillMaxWidth()) {
-            Box(Modifier.weight(1f)) {
-                LgButton(if (state.connected) "Reconnect" else "Try again", primary = !state.connected, onClick = onReconnect)
+        if (onWifi) {
+            InfoRow("status", state.status)
+            if (!state.connected) {
+                Note("The node must be running and on the same network. 10.0.2.2 resolves only on an emulator.")
             }
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.weight(1f)) { LgButton("Change node", onClick = onChangeNode) }
+            Row(Modifier.fillMaxWidth()) {
+                Box(Modifier.weight(1f)) {
+                    LgButton(if (state.connected) "Reconnect" else "Try again", primary = !state.connected, onClick = onReconnect)
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) { LgButton("Change node", onClick = onChangeNode) }
+            }
+        } else {
+            Note(
+                "Joining the node's AP would cost you internet, since it has none behind it. " +
+                    "Over BLE the phone stays on whatever WiFi it is already on."
+            )
         }
 
         // 3 ─ BLE, real now: the board has a GATT service
@@ -239,7 +254,13 @@ fun LinkScreen(
                     found = emptyList()
                     scanning = true
                 }
-                if (onBle) LgButton("Go back to wifi") { onUseWifi() }
+                if (onBle) {
+                // The manual retry lives here while BLE is the wire, because
+                // step 2's buttons are hidden — the backoff handles a drop by
+                // itself, but a node you have just switched on is worth a tap.
+                LgButton("Reconnect over ble", onClick = onReconnect)
+                LgButton("Go back to wifi") { onUseWifi() }
+            }
             }
         }
 

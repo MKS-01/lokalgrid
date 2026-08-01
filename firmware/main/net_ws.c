@@ -16,6 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "record.h"
 #include "session.h"
 
 static const char *TAG = "ws";
@@ -71,21 +72,47 @@ static esp_err_t tx_text(void *ctx, const char *text)
     return httpd_ws_send_frame_async(s_server, (int)(intptr_t)ctx, &f);
 }
 
+/* One record per WebSocket frame.
+ *
+ * The session hands over runs of records now — several at once, so BLE can pack
+ * them into full §4 chunks — but a WebSocket frame is already a framing layer and
+ * this wire has carried exactly one 32-byte record per binary message since Phase
+ * 00. The app reads the first record of whatever arrives, so a run sent whole
+ * would lose all but its first entry *silently*, which is the one failure mode
+ * this protocol is not allowed to have. Framing is the transport's job; this is
+ * it doing it. */
 static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
 {
-    httpd_ws_frame_t f = {
-        .final = true,
-        .type = HTTPD_WS_TYPE_BINARY,
-        .payload = (uint8_t *)data,
-        .len = len,
-    };
-    return httpd_ws_send_frame_async(s_server, (int)(intptr_t)ctx, &f);
+    for (size_t off = 0; off < len; off += LG_RECORD_BYTES) {
+        size_t n = (len - off) < LG_RECORD_BYTES ? (len - off) : LG_RECORD_BYTES;
+        httpd_ws_frame_t f = {
+            .final = true,
+            .type = HTTPD_WS_TYPE_BINARY,
+            .payload = (uint8_t *)data + off,
+            .len = n,
+        };
+        esp_err_t err = httpd_ws_send_frame_async(s_server, (int)(intptr_t)ctx, &f);
+        if (err != ESP_OK) return err;
+    }
+    return ESP_OK;
+}
+
+/* The session has given up on this client. Clear the mapping *first*: httpd
+ * calls on_close() below when the socket actually goes, and by then this id may
+ * belong to whoever arrived next — leaving the pair in place would evict them. */
+static void tx_drop(void *ctx)
+{
+    int fd = (int)(intptr_t)ctx;
+    ESP_LOGI(TAG, "session dropped fd %d — closing the socket", fd);
+    set_id(fd, -1);
+    httpd_sess_trigger_close(s_server, fd);
 }
 
 static const lg_tx_t WS_TX = {
     .name = "wifi",
     .send_text = tx_text,
     .send_bin = tx_bin,
+    .on_drop = tx_drop,
 };
 
 static esp_err_t ws_handler(httpd_req_t *req)

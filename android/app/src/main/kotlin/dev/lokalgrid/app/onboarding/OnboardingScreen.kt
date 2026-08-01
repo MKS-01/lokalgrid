@@ -180,7 +180,7 @@ private fun StepPermissions(context: Context) {
             LgButton("Grant Bluetooth permissions", primary = true) { launcher.launch(wanted.toTypedArray()) }
             Note("Denied by accident? Android stops asking after two refusals — the Config tab links to app settings.")
         } else if (wanted.isNotEmpty()) {
-            Note("All granted. BLE itself arrives with the hardware in Phase 03 — nothing connects over Bluetooth yet.")
+            Note("All granted. The node serves the same session over BLE — scan for it from the Link screen (tap the status bar).")
         }
     }
 }
@@ -244,7 +244,7 @@ private fun StepNode(url: String, onUrl: (String) -> Unit) {
         Note("The node: ws://192.168.4.1/ws — join its \"lokalgrid\" WiFi first.")
         Note("Emulator: ws://10.0.2.2:8787 — that alias only works there.")
         Note("Real phone: ws://<your dev machine's LAN IP>:8787, same WiFi.")
-        Note("Phase 03: the T-Beam's own SoftAP, fixed SSID `lokalgrid`.")
+        Note("The node runs its own SoftAP, fixed SSID `lokalgrid`, no internet behind it.")
 
         SectionLabel("presets")
         Row(Modifier.fillMaxWidth()) {

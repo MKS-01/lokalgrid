@@ -165,22 +165,39 @@ static esp_err_t send_bin_c(client_t *c, const uint8_t *data, size_t len)
     return err;
 }
 
-/* A send that fails means the socket is gone — drop the client rather than
- * leaving a roster entry nobody can reach. */
-static void drop_client(client_t *c, const char *why)
+/* A send that fails means the wire is gone — drop the client rather than leaving
+ * a roster entry nobody can reach.
+ *
+ * `tell_tx` is the half that was missing. Freeing the slot here is not enough:
+ * the transport still holds a peer that believes it is client N, and N is handed
+ * to the next phone that arrives. That peer's next control frame then arrives in
+ * a stranger's mouth, and its eventual disconnect evicts the stranger. So when
+ * the *session* gives up, it says so and the transport closes the wire; when the
+ * *transport* is the one reporting a departure (lg_session_leave) it does not,
+ * because there is nothing left to close. */
+static void drop_client(client_t *c, const char *why, bool tell_tx)
 {
     if (!c || !c->used) return;
     ESP_LOGI(TAG, "%s left (%s) — %u client%s", c->name, why,
              (unsigned)(client_count() - 1), client_count() == 2 ? "" : "s");
+    const lg_tx_t *tx = c->tx;
+    void *ctx = c->ctx;
     c->used = false;
+    c->tx = NULL;
+    c->ctx = NULL;
+    if (tell_tx && tx && tx->on_drop) tx->on_drop(ctx);
 }
 
 static void broadcast_text(const char *text)
 {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (!s_clients[i].used) continue;
-        if (send_text_c(&s_clients[i], text) != ESP_OK) {
-            drop_client(&s_clients[i], "send failed");
+        esp_err_t err = send_text_c(&s_clients[i], text);
+        /* Congestion is not a departure. A peer frame or a stats line lost to a
+         * full notification pool costs nothing — the next one is a second away —
+         * whereas evicting a working phone costs it the whole session. */
+        if (err != ESP_OK && err != ESP_ERR_TIMEOUT) {
+            drop_client(&s_clients[i], "send failed", true);
         }
     }
 }
@@ -338,12 +355,77 @@ static void log_and_broadcast(const lg_record_t *r)
         /* A client still catching up must not be handed live records out of
          * order — its cursor advances through the backlog first. */
         if (c->pos_cursor + 1 != s_pos_newest) continue;
-        if (send_bin_c(c, pos_slot(s_pos_newest), LG_RECORD_BYTES) != ESP_OK) {
-            drop_client(c, "record send failed");
+        esp_err_t err = send_bin_c(c, pos_slot(s_pos_newest), LG_RECORD_BYTES);
+        /* Congestion is not a departure: leave the cursor where it is and this
+         * record goes out as backlog on the next tick. */
+        if (err == ESP_ERR_TIMEOUT) continue;
+        if (err != ESP_OK) {
+            drop_client(c, "record send failed", true);
             continue;
         }
         c->pos_cursor = s_pos_newest;
     }
+}
+
+typedef enum { PUMP_OK, PUMP_BLOCKED, PUMP_GONE } pump_t;
+
+/**
+ * Hand a catching-up client its next slice of backlog.
+ *
+ * **In runs, not one record at a time.** This used to call send_bin_c() once per
+ * 32-byte record, which on BLE meant sixty separate notifications — sixty §4
+ * chunks each carrying a single record, against a notification pool that holds a
+ * dozen. The pool emptied a few records in, the send failed, and the client was
+ * dropped mid-backfill: the phone stayed connected over GATT while the node had
+ * quietly forgotten it. It also wasted the chunk framing entirely, since a chunk
+ * sized from a 517-byte MTU has room for fifteen records.
+ *
+ * A run is what is contiguous *in the ring*, so the transport gets one buffer it
+ * can split into full chunks. The runs stop at the ring's wrap, at the newest
+ * record, and at BACKLOG_CHUNK — bounded chunks interleaved with live traffic is
+ * still the rule (§3).
+ */
+static pump_t pump_client(client_t *c)
+{
+    uint32_t sent = 0;
+    while (c->pos_cursor < s_pos_newest && sent < BACKLOG_CHUNK) {
+        uint32_t seq = c->pos_cursor + 1;
+        if (!pos_holds(seq)) {
+            /* It aged out underneath us — resume from what the node still has. */
+            c->pos_cursor = pos_oldest() - 1;
+            continue;
+        }
+        uint32_t run = POS_RING - (uint32_t)((seq - 1) % POS_RING);   /* to the wrap */
+        uint32_t left = s_pos_newest - seq + 1;
+        if (run > left) run = left;
+        if (run > BACKLOG_CHUNK - sent) run = BACKLOG_CHUNK - sent;
+
+        esp_err_t err = send_bin_c(c, pos_slot(seq), (size_t)run * LG_RECORD_BYTES);
+        if (err == ESP_ERR_TIMEOUT) return PUMP_BLOCKED;   /* nothing went out */
+        if (err != ESP_OK) {
+            drop_client(c, "backlog send failed", true);
+            return PUMP_GONE;
+        }
+        c->pos_cursor = seq + run - 1;
+        sent += run;
+    }
+    return PUMP_OK;
+}
+
+/* Where the client got to, and how much is still owed — a number, never a
+ * spinner (§6). Sent after every pump so the app can render progress. */
+static void send_backlog_tail(client_t *c)
+{
+    char buf[160];
+    if (c->pos_cursor >= s_pos_newest) {
+        snprintf(buf, sizeof(buf), "{\"type\":\"backlogDone\",\"cursor\":%lu,\"live\":true}",
+                 (unsigned long)c->pos_cursor);
+    } else {
+        snprintf(buf, sizeof(buf), "{\"type\":\"backlogChunk\",\"cursor\":%lu,\"remaining\":%lu}",
+                 (unsigned long)c->pos_cursor,
+                 (unsigned long)(s_pos_newest - c->pos_cursor));
+    }
+    send_text_c(c, buf);
 }
 
 /* Answer a cursor: say what is owed and what aged out *before* sending it. */
@@ -379,32 +461,17 @@ static void resume_positions(client_t *c, uint32_t from_client)
 
     c->pos_cursor = want - 1;
 
-    /* Bounded chunks: a client returning after an hour must not block the ones
-     * that are live (§3). One chunk now, the rest on the next ticks. */
-    uint32_t sent = 0;
-    while (c->pos_cursor < s_pos_newest && sent < BACKLOG_CHUNK) {
-        uint32_t seq = c->pos_cursor + 1;
-        if (!pos_holds(seq)) break;
-        if (send_bin_c(c, pos_slot(seq), LG_RECORD_BYTES) != ESP_OK) {
-            drop_client(c, "backlog send failed");
-            return;
-        }
-        c->pos_cursor = seq;
-        sent++;
-    }
-
-    char tail[160];
-    if (c->pos_cursor >= s_pos_newest) {
-        snprintf(tail, sizeof(tail),
-                 "{\"type\":\"backlogDone\",\"cursor\":%lu,\"live\":true}",
-                 (unsigned long)c->pos_cursor);
-    } else {
-        snprintf(tail, sizeof(tail),
-                 "{\"type\":\"backlogChunk\",\"cursor\":%lu,\"remaining\":%lu}",
-                 (unsigned long)c->pos_cursor,
-                 (unsigned long)(s_pos_newest - c->pos_cursor));
-    }
-    send_text_c(c, tail);
+    /* The records themselves go out from the tick (pump_backlog), not from here.
+     * This runs on whichever task delivered the client's frame — for BLE that is
+     * the NimBLE host task, and a hundred notifications pushed from the task that
+     * is *supposed* to be draining them is how the pool empties in the first
+     * place. Bounded chunks interleaved with live traffic (§3) is the same rule
+     * seen from the other side, and the wait is at most one tick.
+     *
+     * A client that is already up to date gets its answer now, because
+     * pump_backlog will skip it and it would otherwise wait for a `backlogDone`
+     * that never comes. */
+    if (c->pos_cursor >= s_pos_newest) send_backlog_tail(c);
 }
 
 /* Keep feeding a catching-up client between live records. */
@@ -413,30 +480,7 @@ static void pump_backlog(void)
     for (int i = 0; i < MAX_CLIENTS; i++) {
         client_t *c = &s_clients[i];
         if (!c->used || c->pos_cursor >= s_pos_newest) continue;
-
-        uint32_t sent = 0;
-        while (c->pos_cursor < s_pos_newest && sent < BACKLOG_CHUNK) {
-            uint32_t seq = c->pos_cursor + 1;
-            if (!pos_holds(seq)) { c->pos_cursor = pos_oldest() - 1; break; }
-            if (send_bin_c(c, pos_slot(seq), LG_RECORD_BYTES) != ESP_OK) {
-                drop_client(c, "backlog send failed");
-                break;
-            }
-            c->pos_cursor = seq;
-            sent++;
-        }
-        if (!c->used) continue;
-
-        char buf[160];
-        if (c->pos_cursor >= s_pos_newest) {
-            snprintf(buf, sizeof(buf), "{\"type\":\"backlogDone\",\"cursor\":%lu,\"live\":true}",
-                     (unsigned long)c->pos_cursor);
-        } else {
-            snprintf(buf, sizeof(buf), "{\"type\":\"backlogChunk\",\"cursor\":%lu,\"remaining\":%lu}",
-                     (unsigned long)c->pos_cursor,
-                     (unsigned long)(s_pos_newest - c->pos_cursor));
-        }
-        send_text_c(c, buf);
+        if (pump_client(c) != PUMP_GONE) send_backlog_tail(c);
     }
 }
 
@@ -848,7 +892,8 @@ void lg_session_leave(int id)
 {
     client_t *c = client_by_id(id);
     if (!c) return;
-    drop_client(c, "left");
+    /* The transport is the one telling us, so there is nothing left to close. */
+    drop_client(c, "left", false);
     send_roster(NULL);
 }
 

@@ -72,6 +72,20 @@ class BleClient(private val context: Context) {
     var mtu: Int = 23
         private set
 
+    /**
+     * Which connection attempt owns [gatt], [control] and [mtu].
+     *
+     * The caller's retry loop cancels a flow and starts the next attempt without
+     * waiting for the old one to finish tearing down, so two `events()` bodies
+     * overlap for a moment — and Android keeps delivering the old
+     * `BluetoothGattCallback` for as long as its `BluetoothGatt` is open. Without
+     * a token the loser writes over the winner: a stale `onMtuChanged` reports an
+     * MTU this link never agreed to, and a stale teardown clears the live
+     * characteristic, after which every `send` returns false with nothing visibly
+     * wrong on the wire.
+     */
+    private val session = java.util.concurrent.atomic.AtomicLong(0)
+
     /** Why BLE is not usable right now, or null when it is. Named so the UI can
      *  say which of the three different "no bluetooth" situations this is. */
     fun unavailableReason(): String? = when {
@@ -150,9 +164,21 @@ class BleClient(private val context: Context) {
             return@callbackFlow
         }
 
+        // Claimed before connectGatt, so no callback can arrive unowned.
+        val token = session.incrementAndGet()
+        fun mine() = session.get() == token
+
         // A fresh link negotiates its own MTU. Carrying the last one over would
         // have the UI quoting a number this connection never agreed to.
         mtu = 23
+
+        // Control frames arrive fragmented when they exceed one notification —
+        // this phone negotiates 256, and `stats` and `config` are both larger.
+        // One leading byte says whether more follows. Bytes are joined and
+        // decoded once at the end, never per fragment: a UTF-8 sequence can be
+        // split across two of them. Per connection, so a dropped link cannot
+        // weld half a frame onto the start of the next session.
+        val controlBuf = java.io.ByteArrayOutputStream()
 
         val assembler = ChunkAssembler { record ->
             try {
@@ -164,6 +190,7 @@ class BleClient(private val context: Context) {
 
         val cb = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+                if (!mine()) return
                 if (newState == BluetoothGatt.STATE_CONNECTED) {
                     trySend(NodeClient.Event.Status(false, "connected over ble, discovering"))
                     g.discoverServices()
@@ -174,6 +201,18 @@ class BleClient(private val context: Context) {
             }
 
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+                if (!mine()) return
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    // Discovery is the one step with no retry above it: if it
+                    // failed, nothing later in this callback chain will ever fire.
+                    trySend(NodeClient.Event.Status(false, "service discovery failed (status $status)"))
+                    close()
+                    return
+                }
+                // §5, and it is worth the line: the default connection interval
+                // gives 5–8 KB/s where the tuned one gives 15–25 on the S25. The
+                // backlog after an hour away is ~200 KB of records.
+                runCatching { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) }
                 val svc = g.getService(SERVICE)
                 if (svc == null) {
                     trySend(NodeClient.Event.Status(false, "this device has no lokalgrid service"))
@@ -196,6 +235,7 @@ class BleClient(private val context: Context) {
             }
 
             override fun onMtuChanged(g: BluetoothGatt, newMtu: Int, status: Int) {
+                if (!mine()) return
                 mtu = newMtu
                 trySend(NodeClient.Event.Status(false, "ble mtu $newMtu — subscribing"))
                 // 2M PHY where the phone supports it: 15–25 KB/s instead of 5–8 (§5).
@@ -244,6 +284,7 @@ class BleClient(private val context: Context) {
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+                if (!mine()) return
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     // Without both subscriptions the node will not admit us, so a
                     // failed CCCD write is the end of this attempt — ending the
@@ -280,8 +321,24 @@ class BleClient(private val context: Context) {
             }
 
             private fun dispatch(uuid: UUID, value: ByteArray) {
+                if (!mine()) return
                 when (uuid) {
-                    CHR_CONTROL -> trySend(NodeClient.Event.Frame(Control.decode(value.decodeToString())))
+                    CHR_CONTROL -> {
+                        if (value.isEmpty()) return
+                        controlBuf.write(value, 1, value.size - 1)
+                        if (controlBuf.size() > 16_384) {
+                            // Nothing this protocol sends is remotely this big, so
+                            // a buffer this large means fragments are being joined
+                            // that do not belong together. Say so and start clean
+                            // rather than hand the decoder a growing mess.
+                            controlBuf.reset()
+                            trySend(NodeClient.Event.Dropped("control frame ran past 16 KB — buffer reset"))
+                        } else if (value[0].toInt() == 0) {   // 0 = last fragment
+                            val json = controlBuf.toByteArray().decodeToString()
+                            controlBuf.reset()
+                            trySend(NodeClient.Event.Frame(Control.decode(json)))
+                        }
+                    }
                     CHR_DATA -> assembler.accept(value) { reason ->
                         trySend(NodeClient.Event.Dropped(reason))
                     }
@@ -294,8 +351,16 @@ class BleClient(private val context: Context) {
         gatt = g
 
         awaitClose {
-            control = null
-            gatt = null
+            // Clear only if these still refer to *this* link. The retry loop
+            // cancels the old flow and launches the next attempt without joining
+            // it, so this block can run after a newer connection has already
+            // installed itself — and blindly nulling would leave the live link
+            // with no `control` characteristic, so every frame the app sent
+            // afterwards returned false with nothing wrong on the wire.
+            if (mine()) {
+                control = null
+                gatt = null
+            }
             runCatching { g?.disconnect() }
             runCatching { g?.close() }
         }

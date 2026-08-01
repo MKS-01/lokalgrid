@@ -20,12 +20,41 @@
 
 #include "esp_err.h"
 
-/** How a transport sends. Both may be called from any task; the transport is
+/** How a transport sends. All three may be called from any task; the transport is
  *  responsible for its own serialisation. */
 typedef struct {
     const char *name;    /**< "wifi" or "ble" — goes straight into the roster */
+
     esp_err_t (*send_text)(void *ctx, const char *text);
+
+    /**
+     * Send `len` bytes — always a whole number of 32-byte records.
+     *
+     * Three answers, and the middle one is the whole reason this comment exists:
+     *
+     *   ESP_OK             everything went out
+     *   ESP_ERR_TIMEOUT    **nothing** went out; the wire is congested, ask again
+     *   anything else      this client is unreachable, drop it
+     *
+     * `ESP_ERR_TIMEOUT` must be all-or-nothing: the session rewinds nothing, so a
+     * transport that reports congestion after sending half a buffer would make
+     * the client's cursor lie. BLE's notification pool empties routinely during a
+     * backlog burst, and treating that as a dead client — which is what it did
+     * until 2026-08-01 — evicts phones that are working perfectly.
+     */
     esp_err_t (*send_bin)(void *ctx, const uint8_t *data, size_t len);
+
+    /**
+     * Optional. The session has given up on this client and will never name `ctx`
+     * again: close the wire.
+     *
+     * Without this the transport keeps a peer that still believes it is client N
+     * while the session hands N to the next phone that arrives — so one client's
+     * chat goes out under another's callsign, and its eventual disconnect evicts
+     * a stranger. Not called from lg_session_leave(): there the transport is
+     * already the one doing the telling.
+     */
+    void (*on_drop)(void *ctx);
 } lg_tx_t;
 
 /** Set up the rings and the config. Call once, before any transport starts. */

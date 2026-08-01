@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "host/ble_gatt.h"
 #include "host/ble_hs.h"
 #include "os/os_mbuf.h"
@@ -46,6 +48,12 @@ static uint16_t s_control_val_handle = 0;
 static uint16_t s_data_val_handle = 0;
 static uint16_t s_last_mtu = 0;
 
+/* Who the NimBLE host task is. Learned rather than declared: every GAP and GATT
+ * callback below runs on it, so the first one to fire knows. See
+ * notify_blocking() for the one thing this is used to decide. */
+static TaskHandle_t s_host_task = NULL;
+static inline void note_host_task(void) { s_host_task = xTaskGetCurrentTaskHandle(); }
+
 static peer_t *peer_by_conn(uint16_t conn)
 {
     for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
@@ -70,28 +78,108 @@ static uint16_t crc16_ccitt(const uint8_t *data, size_t len)
 
 /* ── the session's transport ─────────────────────────────────────────────── */
 
+/* The MTU this connection is *actually* on, asked of the stack rather than
+ * remembered.
+ *
+ * The cached copy is only as fresh as the last BLE_GAP_EVENT_MTU, and nothing
+ * guarantees that event lands before the client finishes subscribing — which is
+ * the moment the session joins it and sends a 250-byte `hello`. Against a stale
+ * 23 the frame was refused and merely logged, so the phone connected,
+ * subscribed, and heard nothing: the exact symptom fixed in f64bdfe, reached
+ * through a different door. */
+static uint16_t peer_mtu(const peer_t *p)
+{
+    uint16_t live = ble_att_mtu(p->conn);
+    if (live >= 23) return live;
+    return p->mtu ? p->mtu : 23;
+}
+
+/* How many times to wait on a full notification pool before calling it a wall.
+ * ~10 ms a try: long enough for the controller to drain a few packets, short
+ * enough that one congested client cannot hold the 1 Hz tick. */
+#define NOTIFY_TRIES 16
+#define NOTIFY_WAIT_MS 10
+
+/* One notification, with backpressure treated as backpressure. NimBLE answers a
+ * drained mbuf pool with a NULL buffer or BLE_HS_ENOMEM, and looping blindly on
+ * that is the "silent chunk loss under fast sync" trap (§8) — but so is calling
+ * it a dead client, which is what dropped phones mid-backfill. Returns
+ * ESP_ERR_TIMEOUT when it never got the bytes out. */
+static esp_err_t notify_blocking(uint16_t conn, uint16_t handle, const void *data, size_t len)
+{
+    /* Waiting only works from a task that is not the one doing the draining. The
+     * host task is what frees mbufs as the controller acknowledges them, so
+     * sleeping on it to wait for mbufs guarantees the wait fails — and holds up
+     * every other connection for the duration. From there, one honest attempt. */
+    const int tries = (xTaskGetCurrentTaskHandle() == s_host_task) ? 1 : NOTIFY_TRIES;
+
+    for (int try = 0; try < tries; try++) {
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
+        if (om) {
+            int rc = ble_gatts_notify_custom(conn, handle, om);
+            if (rc == 0) return ESP_OK;
+            /* notify_custom consumes the mbuf whatever it returns. */
+            if (rc != BLE_HS_ENOMEM) {
+                ESP_LOGW(TAG, "notify on conn %u refused: rc %d", conn, rc);
+                return ESP_FAIL;   /* a real refusal — the link is gone */
+            }
+        }
+        if (try + 1 < tries) vTaskDelay(pdMS_TO_TICKS(NOTIFY_WAIT_MS));
+    }
+    return ESP_ERR_TIMEOUT;
+}
+
+/**
+ * A control frame, fragmented across notifications when it does not fit one.
+ *
+ * "Keep the frames small enough to fit the MTU" was a bet, and this phone called
+ * it: a Galaxy S22 answers a 517-byte request with **256**, leaving 253 bytes,
+ * and `stats` (~300 with one client) and `config` (~800) are both over that. The
+ * MTU is negotiated and may legally be as low as 23, so any rule of the form
+ * "our JSON always fits" is one handset away from being false.
+ *
+ * One leading byte per notification: 1 = more follows, 0 = this ends the frame.
+ * Fragments carry **bytes, not characters** — a multi-byte UTF-8 sequence may be
+ * split across two of them, so the receiver joins the bytes and decodes once at
+ * the end (the callsigns are ASCII today, the chat text is not).
+ *
+ * Partial delivery is turned into a hard failure on purpose: the receiver holds
+ * a half-built frame, and the only way to guarantee it is not silently welded to
+ * the next one is to end the connection and let the app reconnect with a clean
+ * buffer.
+ */
 static esp_err_t tx_text(void *ctx, const char *text)
 {
     peer_t *p = (peer_t *)ctx;
     if (!p || !p->used || !p->sub_control) return ESP_FAIL;
 
-    /* Control frames are sent whole. A frame longer than the negotiated MTU
-     * cannot be notified in one go, and rather than invent a second chunking
-     * scheme for JSON, the session's frames are kept small enough — the roster
-     * and stats are the biggest and both fit in a 517-byte MTU. If one ever does
-     * not, this says so instead of truncating silently. */
-    size_t len = strlen(text);
-    uint16_t room = (uint16_t)((p->mtu ? p->mtu : 23) - 3);
-    if (len > room) {
-        ESP_LOGW(TAG, "control frame of %u bytes exceeds the %u-byte MTU payload — dropped",
-                 (unsigned)len, room);
-        return ESP_ERR_INVALID_SIZE;
+    const uint16_t room = (uint16_t)(peer_mtu(p) - 3);
+    if (room < 2) {
+        ESP_LOGE(TAG, "conn %u: an MTU of %u leaves no room for a control frame",
+                 p->conn, peer_mtu(p));
+        return ESP_FAIL;
     }
+    uint8_t frag[520];
+    uint16_t per = (uint16_t)(room - 1);                    /* less the header byte */
+    if ((size_t)per + 1 > sizeof(frag)) per = sizeof(frag) - 1;
 
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(text, len);
-    if (!om) return ESP_ERR_NO_MEM;
-    int rc = ble_gatts_notify_custom(p->conn, s_control_val_handle, om);
-    return rc == 0 ? ESP_OK : ESP_FAIL;
+    const size_t len = strlen(text);
+    size_t sent = 0;
+    do {
+        uint16_t n = (uint16_t)((len - sent) > per ? per : (len - sent));
+        frag[0] = (uint8_t)((sent + n) < len ? 1 : 0);
+        memcpy(&frag[1], text + sent, n);
+
+        esp_err_t err = notify_blocking(p->conn, s_control_val_handle, frag, (size_t)n + 1);
+        if (err != ESP_OK) {
+            /* Congestion is reportable only while nothing has gone out; from the
+             * second fragment on, the receiver is mid-frame and the honest answer
+             * is to drop the link (session.h). */
+            return sent == 0 ? err : ESP_FAIL;
+        }
+        sent += n;
+    } while (sent < len);
+    return ESP_OK;
 }
 
 static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
@@ -102,19 +190,20 @@ static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
     /* §4 chunk framing. `N = negotiated_mtu - 9` is the payload budget: 3 bytes
      * of ATT overhead plus this 6-byte header. Whole records only, so a chunk
      * carries floor(N / 32) of them and never a fragment. */
-    const uint16_t att = (uint16_t)((p->mtu ? p->mtu : 23) - 3);
+    const uint16_t mtu = peer_mtu(p);
+    const uint16_t att = (uint16_t)(mtu - 3);
     const uint16_t budget = (att > 6) ? (uint16_t)(att - 6) : 0;
-    const uint16_t per_chunk = (uint16_t)((budget / LG_RECORD_BYTES) * LG_RECORD_BYTES);
+    uint16_t per_chunk = (uint16_t)((budget / LG_RECORD_BYTES) * LG_RECORD_BYTES);
     if (per_chunk == 0) {
-        ESP_LOGW(TAG, "mtu %u leaves no room for a whole 32-byte record", p->mtu);
+        ESP_LOGW(TAG, "mtu %u leaves no room for a whole 32-byte record", mtu);
         return ESP_ERR_INVALID_SIZE;
     }
+    uint8_t frame[6 + 512];
+    if ((size_t)per_chunk + 6 > sizeof(frame)) per_chunk = sizeof(frame) - 6;
 
     size_t sent = 0;
     while (sent < len) {
         uint16_t n = (uint16_t)((len - sent) > per_chunk ? per_chunk : (len - sent));
-        uint8_t frame[6 + 512];
-        if ((size_t)n + 6 > sizeof(frame)) return ESP_ERR_INVALID_SIZE;
 
         frame[0] = (uint8_t)(p->chunk_seq & 0xff);
         frame[1] = (uint8_t)(p->chunk_seq >> 8);
@@ -125,26 +214,40 @@ static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
         frame[4 + n] = (uint8_t)(crc & 0xff);
         frame[5 + n] = (uint8_t)(crc >> 8);
 
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(frame, (size_t)n + 6);
-        if (!om) return ESP_ERR_NO_MEM;
-        int rc = ble_gatts_notify_custom(p->conn, s_data_val_handle, om);
-        if (rc != 0) {
-            /* Notification queue full is the documented failure here, and looping
-             * blindly on it is the "silent chunk loss under fast sync" trap (§8).
-             * Reporting it lets the session drop the client rather than pretend. */
-            ESP_LOGW(TAG, "notify failed (rc %d) at chunk %u", rc, p->chunk_seq);
-            return ESP_FAIL;
+        esp_err_t err = notify_blocking(p->conn, s_data_val_handle, frame, (size_t)n + 6);
+        if (err == ESP_ERR_TIMEOUT) {
+            /* Congestion. Reportable as "nothing went out" only while nothing
+             * has: once a chunk is on the wire the session has already counted
+             * it, so from there this is a wall rather than a pause (session.h). */
+            ESP_LOGW(TAG, "conn %u is congested at chunk %u", p->conn, p->chunk_seq);
+            return sent == 0 ? ESP_ERR_TIMEOUT : ESP_FAIL;
         }
+        if (err != ESP_OK) return ESP_FAIL;
+
         p->chunk_seq++;
         sent += n;
     }
     return ESP_OK;
 }
 
+/* The session has given up on this peer. Clear the join *before* terminating, so
+ * the disconnect that follows does not hand a recycled client id to
+ * lg_session_leave() and evict whoever holds it by then. */
+static void tx_drop(void *ctx)
+{
+    peer_t *p = (peer_t *)ctx;
+    if (!p) return;
+    ESP_LOGI(TAG, "session dropped conn %u — closing the link", p->conn);
+    p->joined = false;
+    p->used = false;
+    ble_gap_terminate(p->conn, BLE_ERR_REM_USER_CONN_TERM);
+}
+
 static const lg_tx_t BLE_TX = {
     .name = "ble",
     .send_text = tx_text,
     .send_bin = tx_bin,
+    .on_drop = tx_drop,
 };
 
 /* ── GATT access ─────────────────────────────────────────────────────────── */
@@ -175,6 +278,7 @@ static int on_control_write(uint16_t conn, struct ble_gatt_access_ctxt *ctxt)
 
 static int chr_access(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
+    note_host_task();
     switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_WRITE_CHR:
         return on_control_write(conn, ctxt);
@@ -215,6 +319,7 @@ static const struct ble_gatt_svc_def SERVICES[] = {
 
 void ble_gatt_on_connect(uint16_t conn, uint16_t mtu)
 {
+    note_host_task();
     peer_t *p = NULL;
     for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
         if (!s_peers[i].used) { p = &s_peers[i]; break; }
@@ -238,6 +343,7 @@ void ble_gatt_on_connect(uint16_t conn, uint16_t mtu)
 
 void ble_gatt_on_subscribe(uint16_t conn, uint16_t attr_handle, bool notify)
 {
+    note_host_task();
     peer_t *p = peer_by_conn(conn);
     if (!p) return;
 

@@ -73,7 +73,14 @@ fun ConfigScreen(
             val ok = Setup.batteryExempt(context)
             Pill(if (ok) "exempt" else "restricted — sync will die", if (ok) PillKind.OK else PillKind.WARN)
         }
-        InfoRow("ble link") { Pill("phase 03 · needs the board", PillKind.NEUTRAL) }
+        InfoRow("ble link") {
+            when {
+                state.transport == "ble" && state.connected ->
+                    Pill("connected · mtu ${state.bleMtu}", PillKind.OK)
+                state.transport == "ble" -> Pill("connecting", PillKind.LORA)
+                else -> Pill("available — on wifi now", PillKind.NEUTRAL)
+            }
+        }
         LgButton("Open setup again") { onReopenSetup() }
         LgButton("Android app settings") { Setup.openAppSettings(context) }
 

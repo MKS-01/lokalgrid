@@ -178,8 +178,15 @@ class LiveViewModel(
         // Joining the node's AP is the event that makes the next attempt work, so
         // it retries immediately rather than sitting out the backoff.
         binding?.onChanged = {
-            _state.value = _state.value.copy(status = "wifi changed — reconnecting")
-            connect()
+            // Only the wire that a WiFi change can actually affect. Over BLE this
+            // used to tear down a working GATT session — MTU renegotiated, both
+            // characteristics resubscribed, the backlog re-requested — because the
+            // phone happened to walk past an access point. BLE is the transport
+            // that is meant to survive exactly that (§3).
+            if (!useBle) {
+                _state.value = _state.value.copy(status = "wifi changed — reconnecting")
+                connect()
+            }
         }
     }
 
@@ -376,7 +383,8 @@ class LiveViewModel(
     private fun sendFrame(frame: ClientFrame): Boolean =
         if (useBle) ble!!.send(frame) else client.send(frame)
 
-    /** Restart the mock's synthetic track. Phase 03 replaces this with a real one. */
+    /** Restart the mock's synthetic track. The real node refuses this with its
+     *  reason — it logs what the GNSS gives it, so there is no track to restart. */
     fun resetTrack() = sendFrame(ClientFrame.Reset)
 
     /**
