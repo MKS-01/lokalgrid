@@ -36,7 +36,8 @@
   <img src="docs/screens/02-live.png" alt="Live — fix, uncertainty, people, cursor" width="170">
   <img src="docs/screens/03-map.png" alt="Map — everyone, each with its accuracy ring and age" width="170">
   <img src="docs/screens/04-chat.png" alt="Chat — delivered messages and the link-out queue reason" width="170"><br>
-  <sub>Boot · Live · Map · Chat. Captured against the mock node — map is Greenwich, peers are <code>alpha</code> and <code>bravo</code>.</sub>
+  <sub>Boot · Live · Map · Chat — all twelve screens in <a href="docs/screens">docs/screens/</a>.<br>
+  Captured against the mock node: map is Greenwich, peers are <code>alpha</code> and <code>bravo</code>.</sub>
 </p>
 
 ---
@@ -172,14 +173,6 @@ frames do sit apart in `:protocol`, a plain Kotlin module with no Android
 dependency, so the shareable half is already separated — but it is a JVM module
 leaning on `java.nio.ByteBuffer` and `java.util.zip.CRC32`, so Kotlin
 Multiplatform would be a port, not a switch.
-
-<p align="center">
-  <img src="docs/screens/05-clients.png" alt="Clients — the roster with each client's transport" width="170">
-  <img src="docs/screens/06-config.png" alt="Config — staged locally, written explicitly" width="170">
-  <img src="docs/screens/08-diagnostics.png" alt="Diagnostics — behind a long-press on the title" width="170">
-  <img src="docs/screens/09-setup-1.png" alt="Setup — first run" width="170"><br>
-  <sub>Clients · Config · Diagnostics · Setup. All twelve screens in <a href="docs/screens">docs/screens/</a>.</sub>
-</p>
 
 ---
 
