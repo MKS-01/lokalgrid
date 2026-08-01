@@ -1,8 +1,8 @@
 <h1 align="center">lokalgrid</h1>
 
 <p align="center">
-  <strong>A modern walkie-talkie.</strong> Text and live position, for whoever is in range.<br>
-  No internet. No server. No cell coverage. Text, not voice.
+  <strong>A shared field node.</strong> Chat and live position, for whoever is in range.<br>
+  No internet. No server. No cell coverage.
 </p>
 
 <p align="center">
