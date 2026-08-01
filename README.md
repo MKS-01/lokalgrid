@@ -1,8 +1,8 @@
 <h1 align="center">lokalgrid</h1>
 
 <p align="center">
-  <strong>A shared field node.</strong> Chat and live position, for whoever is in range.<br>
-  No internet. No server. No cell coverage.
+  <strong>Off-grid group chat and a shared live map.</strong><br>
+  One ESP32-S3 board is the whole network — no internet, no server, no cell.
 </p>
 
 <p align="center">
