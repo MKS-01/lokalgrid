@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lokalgrid — master plan</title>
+<title>Lokalgrid — architecture</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -152,16 +152,16 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
 <div class="wrap">
 
 <header class="top">
-  <div class="kicker">LILYGO T-Beam Supreme (S3-Core v3.0 + baseboard) · SX1262 · L76K · ESP-IDF · Kotlin/Compose · reference spec</div>
+  <div class="kicker">LILYGO T-Beam Supreme (S3-Core v3.0 + baseboard) · SX1262 · L76K · ESP-IDF · Kotlin/Compose · architecture</div>
   <h1>Lokalgrid<em>a shared field node</em></h1>
-  <p class="thesis">A modern walkie-talkie: encrypted text and live position for whoever is inside the building, or within radio range of the node. One board carries the GNSS, the storage and the long link; up to nine phones share it. This document is the working spec — what the hardware does, what the app does, and the protocol where they meet. The reasoning behind each decision lives in <code>PROJECT.md</code>; the session-by-session history lives in <code>BUILDLOG.md</code>.</p>
+  <p class="thesis">Off-grid group chat and a shared live map. One board carries the GNSS, the storage and the long link; up to nine phones share it over WiFi and BLE, with no internet, no server and no cell coverage behind it. This document is the architecture — what the hardware does, what the app does, and the protocol where they meet. The reasoning behind each decision lives in <code>PROJECT.md</code>; the session-by-session history lives in <code>BUILDLOG.md</code>.</p>
   <div class="strip">
     <div><span class="dot"></span><b>Node</b> ESP-IDF · FreeRTOS</div>
     <div><b>Links</b> BLE always · WiFi AP on demand · LoRa out</div>
     <div><b>Clients</b> 9 max, ~4–6 comfortable</div>
-    <div><b>Store</b> LittleFS on the node · Room on the phone</div>
-    <div><b>Now</b> Phase 02, against the mock</div>
-    <div><b>Tests</b> 37 node · 26 Kotlin</div>
+    <div><b>Store</b> LittleFS on the node · cursor on the phone</div>
+    <div><b>Now</b> serving two phones off the board</div>
+    <div><b>Tests</b> 37 node · 26 Kotlin · 5 C</div>
   </div>
 </header>
 
@@ -170,14 +170,16 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <div class="rail"><span class="no">01</span>System<p>Two halves and the link between them. Everything else in this document elaborates one of the three.</p></div>
   <div class="body">
     <h2>What this is</h2>
-    <div class="note ok"><b>A modern walkie-talkie.</b> Encrypted text and shared position for whoever is inside the building, or within radio range of the node. <em>Walkie-talkie</em> is the metaphor — group, range-bound, immediate, no dialling and no accounts — <b>not</b> voice: this stays text. Range is enforced by physics rather than policy, which is the honest version of a geofence: reach the node and you are in the group; walk out and you are not.</div>
+    <div class="note ok"><b>One node, many phones.</b> Group chat and a shared live map for whoever is in range of the board — no dialling, no accounts, and nothing behind it. Membership is enforced by physics rather than policy, which is the honest version of a geofence: reach the node and you are in the group; walk out and you are not.</div>
+
+    <div class="note"><b>How to read this.</b> Sections 01–04 describe the architecture, including parts not yet built; <a href="#state">05 State</a> is the authority on what actually runs today. Anything designed but not written yet carries a <span class="pill n">planned</span> pill.</div>
 
     <h3>The three parts</h3>
     <div class="tw"><table>
       <thead><tr><th>Part</th><th>Owns</th><th>Does not</th></tr></thead>
       <tbody>
-        <tr><td><b>The node</b><br><span class="pill l">T-Beam</span></td><td>What exists: the position log and its sequence numbers, the roster, admission decisions, airtime scheduling, undelivered dead-drop traffic. Holds GNSS and the only long-range radio.</td><td>Read message bodies — they are sealed. Keep the durable archive; it is a relay you might switch off.</td></tr>
-        <tr><td><b>The app</b><br><span class="pill ok">Android</span></td><td>What it has received: its own cursors, and the durable copy of this user's messages and track in Room. All rendering, including uncertainty.</td><td>Invent sequence numbers, guess what the node holds, or claim delivery the node has not confirmed.</td></tr>
+        <tr><td><b>The node</b><br><span class="pill l">T-Beam</span></td><td>What exists: the position log and its sequence numbers, the roster, admission decisions, airtime scheduling, undelivered dead-drop traffic. Holds GNSS and the only long-range radio.</td><td>Read message bodies — they are sealed <span class="pill n">planned</span>. Keep the durable archive; it is a relay you might switch off.</td></tr>
+        <tr><td><b>The app</b><br><span class="pill ok">Android</span></td><td>What it has received: its own cursors, and the durable copy of this user's messages and track in Room <span class="pill n">planned</span>. All rendering, including uncertainty.</td><td>Invent sequence numbers, guess what the node holds, or claim delivery the node has not confirmed.</td></tr>
         <tr><td><b>The link</b><br><span class="pill n">protocol</span></td><td>Binary 32-byte records for positions; one JSON object per text frame for everything else, both directions. Cursors, backlog, queue reasons, config, stats.</td><td>Carry anything the node needs to decrypt in order to schedule. It routes on <code>{addressee, length}</code>.</td></tr>
       </tbody>
     </table></div>
@@ -195,7 +197,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
       </tbody>
     </table></div>
 
-    <h3>The three features that make it itself</h3>
+    <h3>The three features that make it itself <span class="pill n">planned</span></h3>
     <ul>
       <li><b>The airtime economy, made visible.</b> One radio, a hard 1&nbsp;% duty cycle, nine clients: airtime is a scarce shared resource with a price, so show the price. What a message costs in milliseconds before it is sent, each client's share of the hour, and why yours is behind — a name, not a spinner.</li>
       <li><b>The encrypted dead-drop.</b> The node holds sealed messages for people who are not here <em>yet</em>, and the stretch of track they missed, and hands both over on arrival. It schedules that traffic without being able to read it.</li>
@@ -210,7 +212,7 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
   <div class="rail"><span class="no">02</span>Hardware<p>The node. Everything is on the board already — the additions are two antennas and a cell.</p></div>
   <div class="body">
     <h2>The board</h2>
-    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. <b>Band: 868 MHz</b>, the India-compatible variant. 865–867 MHz is India’s delicensed ISM allocation and the Meshtastic <code>IN</code> region — centre the beacon inside it rather than using the full EU 868 range, and buy an 865–868 MHz whip. Worth confirming <code>868M</code> on the silkscreen beside the SMA connector before the first transmission.</div>
+    <div class="note ok"><b>LilyGO T-Beam Supreme.</b> The silkscreen reads <b>S3-Core v3.0</b> and that is expected — the Supreme <em>is</em> the S3-Core module seated in a baseboard. This is the 868/915&nbsp;MHz SX1262 variant; <b>set the band from your own regulator’s table</b>, since which slice is licence-free depends entirely on where you are. Read the band marking on the silkscreen beside the SMA connector and fit a whip that matches it — a mismatch degrades the PA over weeks and reads exactly like a firmware bug. This build runs 868, kept inside 865–867&nbsp;MHz. Nothing transmits yet.</div>
 
     <div class="tw"><table>
       <thead><tr><th>Subsystem</th><th>Part</th><th class="m">Bus</th></tr></thead>
@@ -240,33 +242,33 @@ footer{padding:38px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink
         <text class="tl" x="52" y="130">GNSS (L76K/M10S)</text><text class="sb" x="52" y="145">u.FL active antenna</text>
         <path class="bus" d="M230 132 H326"/><text class="buslab" x="278" y="127">UART1</text>
 
-        <rect class="blk t" x="40" y="162" width="190" height="40" rx="4"/>
-        <text class="tl" x="52" y="180">QMI8658 IMU</text><text class="sb" x="52" y="195">accel + gyro + INT</text>
-        <path class="bus" d="M230 182 H326"/><text class="buslab" x="278" y="177">I²C</text>
+        <rect class="blk" x="40" y="162" width="190" height="40" rx="4"/>
+        <text class="tl" x="52" y="180">QMI8658 IMU</text><text class="sb" x="52" y="195">not fitted on this unit</text>
+        <path class="bus" d="M230 182 H326" stroke-dasharray="3 3"/><text class="buslab" x="278" y="177">I²C0</text>
 
         <rect class="blk t" x="40" y="212" width="190" height="40" rx="4"/>
-        <text class="tl" x="52" y="230">BME280 + QMC6310</text><text class="sb" x="52" y="245">baro, temp, heading</text>
-        <path class="bus" d="M230 232 H326"/><text class="buslab" x="278" y="227">I²C</text>
+        <text class="tl" x="52" y="230">BME280 + QMC6310</text><text class="sb" x="52" y="245">0x77 fitted · 0x1c parked</text>
+        <path class="bus" d="M230 232 H326"/><text class="buslab" x="278" y="227">I²C0</text>
 
         <rect class="blk" x="40" y="262" width="190" height="40" rx="4"/>
         <text class="tl" x="52" y="280">User button</text><text class="sb" x="52" y="295">emergency, wake-on-low</text>
         <path class="bus" d="M230 282 H326"/><text class="buslab" x="278" y="277">GPIO</text>
 
         <rect class="blk r" x="670" y="112" width="190" height="40" rx="4"/>
-        <text class="tl" x="682" y="130">SX1262 LoRa</text><text class="sb" x="682" y="145">865&ndash;867 MHz beacon</text>
-        <path class="bus" d="M574 132 H666"/><text class="buslab" x="620" y="127">SPI2</text>
+        <text class="tl" x="682" y="130">SX1262 LoRa</text><text class="sb" x="682" y="145">beacon · not driven yet</text>
+        <path class="bus" d="M574 132 H666" stroke-dasharray="3 3"/><text class="buslab" x="620" y="127">SPI2</text>
 
         <rect class="blk" x="670" y="162" width="190" height="40" rx="4"/>
-        <text class="tl" x="682" y="180">microSD + RTC</text><text class="sb" x="682" y="195">archive · PCF8563</text>
-        <path class="bus" d="M574 182 H666"/><text class="buslab" x="620" y="177">SPI3</text>
+        <text class="tl" x="682" y="180">microSD</text><text class="sb" x="682" y="195">tiles · not driven yet</text>
+        <path class="bus" d="M574 182 H666" stroke-dasharray="3 3"/><text class="buslab" x="620" y="177">SPI3</text>
 
         <rect class="blk" x="670" y="212" width="190" height="40" rx="4"/>
-        <text class="tl" x="682" y="230">OLED 1.3"</text><text class="sb" x="682" y="245">field status</text>
-        <path class="bus" d="M574 232 H666"/><text class="buslab" x="620" y="227">I²C</text>
+        <text class="tl" x="682" y="230">OLED 1.3" + RTC</text><text class="sb" x="682" y="245">0x3c status · PCF8563</text>
+        <path class="bus" d="M574 232 H666"/><text class="buslab" x="620" y="227">I²C0/1</text>
 
         <rect class="blk p" x="670" y="262" width="190" height="40" rx="4"/>
-        <text class="tl" x="682" y="280">AXP2101 PMU</text><text class="sb" x="682" y="295">coulomb counter</text>
-        <path class="bus" d="M574 282 H666"/><text class="buslab" x="620" y="277">I²C</text>
+        <text class="tl" x="682" y="280">AXP2101 PMU</text><text class="sb" x="682" y="295">ALDO4 = GNSS rail</text>
+        <path class="bus" d="M574 282 H666"/><text class="buslab" x="620" y="277">I²C1</text>
 
         <rect class="blk p" x="330" y="340" width="240" height="44" rx="4"/>
         <text class="tl" x="450" y="358" text-anchor="middle">Rails</text>
@@ -387,7 +389,7 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y</pre>
       <tbody>
         <tr><td>Language / UI</td><td><b>Kotlin + Jetpack Compose</b></td><td>Two modules: <code>:protocol</code> is plain Kotlin/JVM (codec + control frames, testable with no device), <code>:app</code> is the Compose client.</td></tr>
         <tr><td>Map</td><td>MapLibre Android + PMTiles</td><td>Keyless raster basemaps today; offline tiles served from the node later.</td></tr>
-        <tr><td>Local store</td><td><b>Room (SQLite)</b></td><td>The durable copy of this user's messages and track. Lightweight, bundled with Android, no server.</td></tr>
+        <tr><td>Local store</td><td><b>Room (SQLite)</b> <span class="pill n">planned</span></td><td>The durable copy of this user's messages and track. Lightweight, bundled with Android, no server.</td></tr>
         <tr><td>Transports</td><td>OkHttp WebSocket over SoftAP · BLE GATT</td><td>Bind sockets to the WiFi <code>Network</code> object so Android's mobile-data fallback cannot steal the session. BLE arrives in Phase 03.</td></tr>
         <tr><td>Background sync</td><td>Foreground service, <code>connectedDevice</code></td><td>BLE sync with the screen off — the reason a native app was chosen over a browser. Lands with BLE.</td></tr>
         <tr><td>Tests</td><td>JUnit against golden vectors · instrumented against the mock</td><td>The protocol module runs on the JVM, so codec work needs no device and no board.</td></tr>
@@ -576,7 +578,7 @@ node → <b>binary</b> …                                          <i>// live r
       <li><b>Local delivery and the link out are two different truths.</b> Phones on one node exchange chat instantly over WiFi/BLE; only the LoRa relay is duty-cycled. Conflating them lies about local delivery.</li>
     </ul>
 
-    <h2>Pairing and encryption</h2>
+    <h2>Pairing and encryption <span class="pill n">planned</span></h2>
     <p>Keys come from an X25519 exchange at pairing, confirmed by a <b>six-digit code shown on the node's own OLED</b> — authenticated key exchange with no server, no QR and no secret typed twice, using a screen the board already has. Per-pair secrets for addressed messages; a node-issued group key, rotated when the roster changes, for the shared channel. Bodies are sealed with an AEAD, so the node schedules and queues from <code>{addressee, length}</code> and never needs the plaintext.</p>
     <div class="note bad"><b>What this does not protect.</b> The node cannot read message bodies, but it does see <em>who</em> talks to whom, <em>when</em>, and <em>how long</em> the message was. Traffic analysis is not defended against, and bodies sit decrypted in app-private storage on the phone. Written down because a &ldquo;secure&rdquo; badge implying more would break the honesty rule harder than any spinner. Encrypting the <em>track log at rest</em> with an eFuse-burned key is a different threat model and is not planned.</div>
 
@@ -617,7 +619,7 @@ crc16 CCITT over seq + len + payload</pre>
       <tbody>
         <tr><td><code>firmware/</code> on the T-Beam</td><td><span class="pill ok">running</span></td><td>ESP-IDF v5.3.1. Boots, inventories both I²C buses, reads the PMU, switches the GNSS rail, mounts LittleFS, advertises over BLE with its GATT service, brings up the SoftAP and serves <code>proto 2</code> on <code>ws://192.168.4.1/ws</code>. The OLED shows an inverted header badged with clients-against-cap, then ssid, wifi, ble (clients and negotiated MTU), gnss (satellites and HDOP, or the age of a lost fix) and the power source with uptime — so the node is readable with no phone attached, and its position carries its uncertainty on the device's own screen as well as in the app.</td></tr>
         <tr><td>GNSS</td><td><span class="pill ok">real fixes</span></td><td>UART1, rx 9 / tx 8 at 9600, behind ALDO4. NMEA GGA/RMC/GSA into the 32-byte record: position, satellites, HDOP, altitude, speed, course, 2D-vs-3D. <code>hello.mode</code> says <code>gnss</code> once a fix exists and <code>synthetic</code> before, so no client can mistake one for the other.</td></tr>
-        <tr><td>Transports</td><td><span class="pill ok">two</span></td><td>WiFi WebSocket and BLE GATT run the <b>same</b> session: one protocol implementation, one roster, one client cap of 9, and each client's transport named on the roster. BLE is verified on the node; the app's half is not yet verified against it.</td></tr>
+        <tr><td>Transports</td><td><span class="pill ok">two</span></td><td>WiFi WebSocket and BLE GATT run the <b>same</b> session: one protocol implementation, one roster, one client cap of 9, and each client's transport named on the roster. Verified end to end with <b>two handsets on the board at once</b> — one over BLE, one over WiFi — in a single roster.</td></tr>
         <tr><td><code>mock-node/</code></td><td><span class="pill ok">running</span></td><td>Node.js. Synthetic track + replay, the full control-frame protocol, chat with node-assigned sequence numbers, the airtime queue with lanes and deficit round-robin, position decimation, config with locked keys, airtime stats, the position log with cursors and chunked backlog. <code>--ghosts N</code> adds synthetic peers; <code>CAP</code>, <code>DUTY</code>, <code>HISTORY</code> tune the pressure.</td></tr>
         <tr><td><code>android/:protocol</code></td><td><span class="pill ok">green</span></td><td>The 32-byte codec and every control frame, hand-parsed so an unknown frame from a newer node renders instead of killing the socket. 26 tests, including frame strings copied verbatim from the mock.</td></tr>
         <tr><td><code>android/:app</code></td><td><span class="pill ok">runs</span></td><td>Five tabs, the Link screen, first-run setup, the map with accuracy rings and a resumed track line, chat with delivery and queue state, cursors persisted per node. The phone's own GNSS drives your dot and what &ldquo;share my position&rdquo; sends, with the node's fix as a labelled fallback. Sockets are pinned to the WiFi network and reconnect by themselves. Two basemaps, and the visible area can be saved for offline use.</td></tr>
@@ -628,7 +630,7 @@ crc16 CCITT over seq + len + payload</pre>
 
     <h2>Next, in order</h2>
     <ol>
-      <li><b>Close out the board bring-up.</b> A breakpoint in <code>app_main</code> over the built-in USB-JTAG, the app's BLE path verified against the node's GATT service, and the BME280 read so <code>baro</code> and <code>tmp</code> carry values instead of sentinels.</li>
+      <li><b>Close out the board bring-up.</b> A breakpoint in <code>app_main</code> over the built-in USB-JTAG, and the BME280 read so <code>baro</code> and <code>tmp</code> carry values instead of sentinels. The app's BLE path is done — verified against the node with two handsets attached at once.</li>
       <li><b>Finish the app-side work.</b> Room for the track itself — the cursor survives a restart, the history does not — then two clients side by side with one deliberately flooding.</li>
       <li><b>Phase 04 — make it fight, and show the price.</b> The scheduler hardened against real airtime timing, then the airtime economy as a feature: cost before sending, share of the hour, a queue you can cancel or promote. OLED status pages and the physical emergency button.</li>
       <li><b>Phase 04b — encryption, the device store, the dead-drop.</b> X25519 pairing confirmed on the OLED, Room as the durable archive, and sealed messages held for people who are not here yet.</li>
@@ -655,7 +657,7 @@ crc16 CCITT over seq + len + payload</pre>
 </section>
 
 <footer>
-  Lokalgrid · reference spec — current state only · decisions and their dates in PROJECT.md · history in BUILDLOG.md · MIT licensed
+  Lokalgrid · architecture — current state only · decisions and their dates in PROJECT.md · history in BUILDLOG.md · MIT licensed
 </footer>
 
 </div>

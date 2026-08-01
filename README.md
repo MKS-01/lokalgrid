@@ -308,7 +308,7 @@ with live traffic. The node states what it owes before sending it, including how
 many records aged out.
 
 Field table in [PROJECT.md §4](PROJECT.md); every control frame in
-[the spec](docs/lokalgrid-master-plan.html); frame-by-frame in
+[the architecture doc](docs/architecture.html); frame-by-frame in
 [`mock-node/README.md`](mock-node/README.md).
 
 ---

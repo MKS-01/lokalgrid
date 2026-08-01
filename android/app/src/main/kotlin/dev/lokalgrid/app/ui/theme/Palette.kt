@@ -3,7 +3,7 @@ package dev.lokalgrid.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * The master-plan palette (docs/lokalgrid-master-plan.html :root), ported verbatim so
+ * The architecture doc's palette (docs/architecture.html :root), ported verbatim so
  * the app and the design doc are the same dark, mono, field-instrument look.
  * Colours carry meaning: lock = present/ok, sig = neutral/queued, lora = the
  * radio link, warn = failure. Keep these in sync with the HTML if it changes.
