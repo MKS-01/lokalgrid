@@ -55,10 +55,9 @@
 OLED, BME280, PCF8563 RTC. ESP-IDF v5.3.1 firmware in `firmware/`.
 
 <p align="center">
-  <img src="docs/hardware.jpg" alt="T-Beam Supreme on the bench, OLED lit, mid-boot" width="472">
-  <img src="docs/bench.jpg" alt="The node running beside the app: OLED showing ssid and client count, phone showing the Map screen" width="265"><br>
-  <sub>Left: mid-boot, <code>starting radios</code> on the OLED, band marking readable on the SX1262 module.<br>
-  Right: up and serving — <code>ssid lokalgrid</code> and <code>usb, no cell</code> on the OLED, the Map screen and its accuracy ring on the phone.</sub>
+  <img src="docs/hardware.jpg" alt="T-Beam Supreme on the bench, OLED lit, mid-boot" width="370">
+  <img src="docs/bench.jpg" alt="The node serving the app: OLED showing ssid and client count, phone showing the Map screen" width="370"><br>
+  <sub>Mid-boot, then serving: <code>starting radios</code> on the OLED, and the Map screen with its accuracy ring on the phone beside it.</sub>
 </p>
 
 **Radio:** never transmit without an antenna — the SX1262 PA is every damage
