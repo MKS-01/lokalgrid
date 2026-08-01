@@ -64,6 +64,47 @@ path. Set the band from your own regulator's table, not from this repo: check
 the marking on the silkscreen beside the SMA connector, fit a matching whip, and
 stay inside whatever is licence-free where you are. Nothing transmits yet.
 
+### On the board
+
+Two I²C buses, not one — the split that took a scan to find. Everything below is
+verified on this unit.
+
+```mermaid
+flowchart LR
+    USB["USB-C<br/>power + CDC console"] --> PMU["AXP2101 PMU<br/>coulomb counter"]
+    PMU -- "ALDO4" --> GNSS["GNSS · L76K<br/>rx 9 / tx 8 · 9600"]
+
+    GNSS -- "UART1" --> MCU
+    PMU -- "I²C1 · sda 42 / scl 41" --> MCU
+    ENV["BME280<br/>baro · temp<br/>fitted, unread"] -- "I²C0 · sda 17 / scl 18" --> MCU
+    BTN["User button<br/>emergency"] -- "GPIO" --> MCU
+    MAG["QMC6310<br/>unused by decision"] -. "I²C0" .-> MCU
+
+    MCU["ESP32-S3FN8<br/>dual core · 8 MB flash<br/>8 MB quad PSRAM<br/>built-in USB-JTAG"]
+
+    MCU -- "I²C0" --> OLED["OLED 1.3in SH1106<br/>0x3c · field status"]
+    MCU -- "I²C1" --> RTC["PCF8563 RTC"]
+    MCU -. "SPI2 · not built" .-> LORA["SX1262 LoRa"]
+    MCU -. "SPI3 · not built" .-> SD["microSD"]
+
+    classDef sense fill:#0f766e,stroke:#5eead4,color:#ffffff
+    classDef radio fill:#5b21b6,stroke:#c4b5fd,color:#ffffff
+    classDef power fill:#b45309,stroke:#fcd34d,color:#ffffff
+    classDef core  fill:#1e293b,stroke:#94a3b8,color:#ffffff
+    classDef idle  fill:#3f3f46,stroke:#a1a1aa,color:#d4d4d8
+
+    class GNSS,ENV sense
+    class LORA radio
+    class PMU,USB power
+    class MCU,OLED,RTC,BTN core
+    class MAG,SD idle
+```
+
+<sub>■ sensing ■ radio ■ power ■ core · dashed = present but not driven yet</sub>
+
+The SX1262 and the microSD stay on **separate SPI buses** — sharing one gives
+corrupt writes that only appear when a beacon fires mid-write.
+
 ### Running today
 
 | | |
@@ -143,19 +184,43 @@ Multiplatform would be a port, not a switch.
 
 ## How it works
 
+Fix and power in on the left, clients out on the right. One session in the
+middle owns the roster, the cursors and the airtime budget.
+
 ```mermaid
 flowchart LR
-    subgraph NODE["T-Beam Supreme"]
+    GNSS["GNSS · L76K<br/>fix + time, UART1"]
+    PMU["PMU · AXP2101<br/>rails, ALDO4 = GNSS"]
+
+    subgraph NODE["T-Beam Supreme · firmware/"]
         direction TB
-        G["GNSS · L76K<br/>fix + time"] --> S
-        P["PMU · AXP2101<br/>rails + charge"] --> S
-        S["session · proto 2<br/>roster · cursors · airtime"] --> O["OLED<br/>readable with no phone"]
-        S --> FS[("LittleFS<br/>32-byte records")]
+        SESSION["session.c · proto 2<br/>roster · cursors · airtime"]
+        FS[("LittleFS<br/>32-byte records")]
+        OLED["OLED 1.3in<br/>readable with no phone"]
+        SESSION --- FS
+        SESSION --- OLED
     end
 
-    S -- "WebSocket · SoftAP" --> A["phone"]
-    S -- "GATT · BLE" --> B["phone"]
-    S -. "LoRa · 1% duty" .-> C["a second node"]
+    GNSS --> SESSION
+    PMU --> SESSION
+
+    SESSION -- "WebSocket · SoftAP" --> P1["phone"]
+    SESSION -- "GATT · BLE" --> P2["phone"]
+    SESSION -. "LoRa · 1% duty · not built" .-> N2["a second node"]
+
+    classDef sense fill:#0f766e,stroke:#5eead4,color:#ffffff
+    classDef power fill:#b45309,stroke:#fcd34d,color:#ffffff
+    classDef core  fill:#1e293b,stroke:#94a3b8,color:#ffffff
+    classDef out   fill:#334155,stroke:#cbd5e1,color:#ffffff
+    classDef todo  fill:#3f3f46,stroke:#a1a1aa,color:#d4d4d8
+
+    style NODE fill:none,stroke:#94a3b8,stroke-dasharray:4 4
+
+    class GNSS sense
+    class PMU power
+    class SESSION,FS,OLED core
+    class P1,P2 out
+    class N2 todo
 ```
 
 The node is authoritative about *what exists* — seq, roster, admission. Each
