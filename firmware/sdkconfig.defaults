@@ -55,3 +55,9 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 # The scheduler and codec get their own log level later; keep the default at
 # info so the first boots are readable.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# The session's own frames are built on this stack — `stats` alone is a 1.1 KB
+# buffer — and the BLE join sends four of them from inside a GAP event callback.
+# The 4096 default left too little headroom: overflowing it panics, and a panic
+# reboots the board mid-connect, which reads as a BLE bug rather than a stack one.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144

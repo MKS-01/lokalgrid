@@ -63,10 +63,13 @@ static peer_t *peer_by_conn(uint16_t conn)
 }
 
 /* CRC-16/CCITT-FALSE over the chunk header and payload (§4). Hand-written, like
- * everything else on this wire, and small enough to compare against the app's. */
-static uint16_t crc16_ccitt(const uint8_t *data, size_t len)
+ * everything else on this wire, and small enough to compare against the app's.
+ *
+ * Incremental, so a chunk's CRC can be taken over its header and its payload
+ * where they lie rather than after copying both into one buffer — see
+ * notify_blocking() for why nothing on this path may hold a big stack array. */
+static uint16_t crc16_ccitt(uint16_t crc, const uint8_t *data, size_t len)
 {
-    uint16_t crc = 0xffff;
     for (size_t i = 0; i < len; i++) {
         crc ^= (uint16_t)data[i] << 8;
         for (int b = 0; b < 8; b++) {
@@ -105,7 +108,16 @@ static uint16_t peer_mtu(const peer_t *p)
  * that is the "silent chunk loss under fast sync" trap (§8) — but so is calling
  * it a dead client, which is what dropped phones mid-backfill. Returns
  * ESP_ERR_TIMEOUT when it never got the bytes out. */
-static esp_err_t notify_blocking(uint16_t conn, uint16_t handle, const void *data, size_t len)
+/* Head and body are notified as one attribute value, joined in the mbuf rather
+ * than in a caller's buffer. That is not a micro-optimisation: the control path
+ * runs on the NimBLE host task, whose stack is a few kilobytes and already
+ * carries the session's largest frame buffers, and a 520-byte fragment assembled
+ * on the way past was enough to overflow it and reboot the board. Nothing on
+ * this path may hold a big automatic array. */
+static esp_err_t notify_blocking(uint16_t conn, uint16_t handle,
+                                 const void *head, size_t head_len,
+                                 const void *body, size_t body_len,
+                                 const void *tail, size_t tail_len)
 {
     /* Waiting only works from a task that is not the one doing the draining. The
      * host task is what frees mbufs as the controller acknowledges them, so
@@ -114,7 +126,15 @@ static esp_err_t notify_blocking(uint16_t conn, uint16_t handle, const void *dat
     const int tries = (xTaskGetCurrentTaskHandle() == s_host_task) ? 1 : NOTIFY_TRIES;
 
     for (int try = 0; try < tries; try++) {
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(head, head_len);
+        if (om && body_len && os_mbuf_append(om, body, body_len) != 0) {
+            os_mbuf_free_chain(om);
+            om = NULL;               /* out of mbufs mid-append: same as no mbuf */
+        }
+        if (om && tail_len && os_mbuf_append(om, tail, tail_len) != 0) {
+            os_mbuf_free_chain(om);
+            om = NULL;
+        }
         if (om) {
             int rc = ble_gatts_notify_custom(conn, handle, om);
             if (rc == 0) return ESP_OK;
@@ -159,18 +179,16 @@ static esp_err_t tx_text(void *ctx, const char *text)
                  p->conn, peer_mtu(p));
         return ESP_FAIL;
     }
-    uint8_t frag[520];
-    uint16_t per = (uint16_t)(room - 1);                    /* less the header byte */
-    if ((size_t)per + 1 > sizeof(frag)) per = sizeof(frag) - 1;
+    const uint16_t per = (uint16_t)(room - 1);              /* less the header byte */
 
     const size_t len = strlen(text);
     size_t sent = 0;
     do {
         uint16_t n = (uint16_t)((len - sent) > per ? per : (len - sent));
-        frag[0] = (uint8_t)((sent + n) < len ? 1 : 0);
-        memcpy(&frag[1], text + sent, n);
+        const uint8_t hdr = (uint8_t)((sent + n) < len ? 1 : 0);
 
-        esp_err_t err = notify_blocking(p->conn, s_control_val_handle, frag, (size_t)n + 1);
+        esp_err_t err = notify_blocking(p->conn, s_control_val_handle,
+                                        &hdr, 1, text + sent, n, NULL, 0);
         if (err != ESP_OK) {
             /* Congestion is reportable only while nothing has gone out; from the
              * second fragment on, the receiver is mid-frame and the honest answer
@@ -198,23 +216,23 @@ static esp_err_t tx_bin(void *ctx, const uint8_t *data, size_t len)
         ESP_LOGW(TAG, "mtu %u leaves no room for a whole 32-byte record", mtu);
         return ESP_ERR_INVALID_SIZE;
     }
-    uint8_t frame[6 + 512];
-    if ((size_t)per_chunk + 6 > sizeof(frame)) per_chunk = sizeof(frame) - 6;
-
     size_t sent = 0;
     while (sent < len) {
         uint16_t n = (uint16_t)((len - sent) > per_chunk ? per_chunk : (len - sent));
 
-        frame[0] = (uint8_t)(p->chunk_seq & 0xff);
-        frame[1] = (uint8_t)(p->chunk_seq >> 8);
-        frame[2] = (uint8_t)(n & 0xff);
-        frame[3] = (uint8_t)(n >> 8);
-        memcpy(&frame[4], data + sent, n);
-        uint16_t crc = crc16_ccitt(frame, (size_t)n + 4);
-        frame[4 + n] = (uint8_t)(crc & 0xff);
-        frame[5 + n] = (uint8_t)(crc >> 8);
+        /* Header and trailer are six bytes between them; the payload is notified
+         * from the ring where it already lives, never copied through here. */
+        const uint8_t hdr[4] = {
+            (uint8_t)(p->chunk_seq & 0xff), (uint8_t)(p->chunk_seq >> 8),
+            (uint8_t)(n & 0xff),            (uint8_t)(n >> 8),
+        };
+        uint16_t crc = crc16_ccitt(0xffff, hdr, sizeof(hdr));
+        crc = crc16_ccitt(crc, data + sent, n);
+        const uint8_t trailer[2] = { (uint8_t)(crc & 0xff), (uint8_t)(crc >> 8) };
 
-        esp_err_t err = notify_blocking(p->conn, s_data_val_handle, frame, (size_t)n + 6);
+        esp_err_t err = notify_blocking(p->conn, s_data_val_handle,
+                                        hdr, sizeof(hdr), data + sent, n,
+                                        trailer, sizeof(trailer));
         if (err == ESP_ERR_TIMEOUT) {
             /* Congestion. Reportable as "nothing went out" only while nothing
              * has: once a chunk is on the wire the session has already counted

@@ -48,7 +48,12 @@ static const char *TAG = "session";
 #define CHAT_RING        48       /* short backfill ring; the phone is the archive (§2) */
 #define CHAT_TEXT_MAX    160
 #define POS_RING         900      /* 15 minutes at 1 Hz, in PSRAM */
-#define BACKLOG_CHUNK    60       /* bounded chunks, interleaved with live traffic (§3) */
+#define BACKLOG_CHUNK    24       /* bounded chunks, interleaved with live traffic (§3) */
+/* 24 rather than 60: a slice is notified back to back, and BLE's mbuf pool holds
+ * roughly a dozen blocks. Sixty records is nine chunks at a 256-byte MTU, which
+ * empties the pool before the controller has drained any of it — so the number
+ * that matters is not how much a client can take but how much the wire can hold
+ * between two ticks. At 1 Hz this still catches up 24x faster than real time. */
 #define LG_NAME_MAX      16   /* not NAME_MAX: that is POSIX's, and it is 255 */
 
 /* Callsigns, never personal names, anywhere in this project. */
