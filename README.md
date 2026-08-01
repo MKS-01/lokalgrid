@@ -42,9 +42,9 @@
 
 ---
 
-- **One radio, up to nine clients.** Airtime is arbitrated across priority lanes
-  by deficit round-robin, at a 1% duty cycle enforced in firmware. Queue state
-  is rendered as a reason: *"queued 56 s, bravo ahead of you"*.
+- **One radio, up to nine clients.** Airtime is scheduled rather than assumed,
+  and the queue explains itself — *"queued 56 s, bravo ahead of you"*, not a
+  spinner.
 - **Every position carries its uncertainty.** Accuracy ring from HDOP, dashed
   interpolated segments, age label on a stale fix.
 
@@ -165,8 +165,9 @@ Also working:
   retry when WiFi changes.
 - **Diagnostics** behind a long-press on the title.
 
-Not built yet: the foreground sync service, and Room for the durable track (the
-cursor persists, the history is still in memory).
+Not built yet: the foreground sync service, and
+[Room](https://developer.android.com/training/data-storage/room) for the durable
+track — the cursor persists, the history is still in memory.
 
 **Android only. iOS is not supported and not planned.** The codec and control
 frames do sit apart in `:protocol`, a plain Kotlin module with no Android
@@ -264,10 +265,8 @@ the plan and the transmit.
 | **Map** | [MapLibre Android](https://maplibre.org/) 11.11.0 — keyless raster sources, no API key, 16 KB page-aligned |
 | **Mock node** | Node.js, serving the real protocol from a synthetic or replayed session |
 
-**Not built yet**, and not dependencies in the tree today: the SX1262 driver
-([RadioLib](https://github.com/jgromes/RadioLib)),
-[Room](https://developer.android.com/training/data-storage/room) for the
-durable copy on the phone, and node-served PMTiles.
+**Not dependencies in the tree today:** the SX1262 driver
+([RadioLib](https://github.com/jgromes/RadioLib)) and node-served PMTiles.
 
 ---
 
