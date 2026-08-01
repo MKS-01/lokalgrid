@@ -220,13 +220,3 @@ esp_err_t net_ws_start(void)
     ESP_LOGI(TAG, "proto 2 on ws://192.168.4.1/ws");
     return ESP_OK;
 }
-
-uint8_t net_ws_clients(void)
-{
-    return lg_session_clients();
-}
-
-bool net_ws_gnss_live(void)
-{
-    return lg_session_gnss_live();
-}

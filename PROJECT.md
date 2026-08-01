@@ -3,7 +3,7 @@
 > **Project name: Lokalgrid** *(2026-07-20)* — *lokal* (German: local) + grid: your own tiny infrastructure grid in the field, no carrier, no internet. Verified unique on GitHub at naming time (0 repos). Repo/dir name: `lokalgrid`.
 
 > Context file for resuming this project from a CLI agent session.
-> Drop this at the repo root. Companion doc: `lokalgrid-master-plan.html` — the **reference spec** (hardware · app · protocol · state). That file carries no rationale and no history; this one carries no step-by-step detail. When a decision here changes something the spec asserts, update both.
+> Drop this at the repo root. Companion doc: `docs/lokalgrid-master-plan.html` — the **reference spec** (hardware · app · protocol · state). That file carries no rationale and no history; this one carries no step-by-step detail. When a decision here changes something the spec asserts, update both.
 
 ---
 
@@ -162,7 +162,7 @@ A second board is the cheapest way to double useful coverage, and it is what mak
 | **Two basemaps, and offline downloads are explicit** *(2026-07-26)* | Satellite and topo were there because they were free, not because the product needs them, and every style is another tile pyramid to fetch for offline use. Streets and Dark stay. The download is user-initiated, shows the tile count and rough size *before* it starts, and says to do it on a network with internet — a few hundred megabytes over someone's mobile data is not a decision the app gets to make. Node-served PMTiles (Phase 06b) is the better answer later. |
 | **Location permission is asked for at the tap, not at first run** *(2026-07-26, narrows the §5 "no location permission at all" note)* | The phone's own GNSS is now what "share my position" sends, so `ACCESS_FINE_LOCATION` (plus `COARSE`, because Android lets the user grant only that) is requested — but **only when the user taps share**, where the reason is on screen. This does not weaken `neverForLocation` on `BLUETOOTH_SCAN`: finding the node still never needs location, and the app never derives a position from a scan result. Refusing it leaves the app fully usable: the node's own fix goes instead and is **labelled as the node's**, so a position never travels under a source nobody stated. Background location is not requested — sharing happens with the app open, and the foreground service arrives with BLE. |
 | **Each user's messages live on their own device** *(2026-07-25, supersedes "no DMs")* | Durable history is a **Room (SQLite)** database on the phone; the node keeps only a short ring for backfill plus undelivered dead-drop traffic, and holds those as ciphertext it cannot read. This supersedes the "no DMs" half of the 2026-07-20 chat decision — addressed messages are the point of a walkie-talkie with named handsets — while the *shared channel* stays exactly one, text only. Rationale: the node is a relay you might leave behind, so the copy that matters belongs to the person who sent or received it. |
-| **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `lokalgrid-master-plan.html` §14. Shared field node stands: one node, multiple phones, everyone on one map. (The client later moved from PWA to native Android — see the superseding row above.) |
+| **Concept reconfirmed after 2026-07-20 rethink** | Alternatives surveyed against the 2026 landscape (MeshCore, Reticulum, TinyGS, sonde/APRS firmware) — see `docs/lokalgrid-master-plan.html` §14. Shared field node stands: one node, multiple phones, everyone on one map. (The client later moved from PWA to native Android — see the superseding row above.) |
 
 ### REJECTED — do not re-propose
 
@@ -528,7 +528,7 @@ Google's agentic Android tools (`developer.android.com/tools/agents`) are the te
 
 Practical notes: parts of the suite were still rolling out at adoption time (the CLI showed "Not Available" on some devices) — confirm it installs on macOS before committing to it. It is a *tool*, not a competing agent host; using it under Claude Code is fine, no need to move into Antigravity/Gemini to get the CLI and Journeys. Android Skills (app distribution) is out of scope — this is a personal build, not a published product (§2).
 
-> **Screenshots of the built app** live in `docs/screens/` and are laid out in `lokalgrid-master-plan.html` §03. Captured 2026-07-25, Phase 02 against the mock — **due for recapture**: the Link and Config screens now report BLE as a live transport rather than as an unbuilt phase, and nothing here has been captured against the real board.
+> **Screenshots of the built app** live in `docs/screens/` and are laid out in `docs/lokalgrid-master-plan.html` §03. Captured 2026-07-25, Phase 02 against the mock — **due for recapture**: the Link and Config screens now report BLE as a live transport rather than as an unbuilt phase, and nothing here has been captured against the real board.
 
 ### Local store and crypto *(2026-07-25)*
 

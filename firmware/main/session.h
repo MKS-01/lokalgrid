@@ -80,7 +80,3 @@ void lg_session_frame(int id, const char *body);
 void lg_session_tick(void);
 
 uint8_t lg_session_clients(void);
-
-/** True while a GNSS fix drives the records; false while they are synthetic.
- *  Reported in `hello.mode`, so no client has to guess. */
-bool lg_session_gnss_live(void);

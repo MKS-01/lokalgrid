@@ -15,7 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.lokalgrid.app.LiveState
-import dev.lokalgrid.app.ui.EmptyState
 import dev.lokalgrid.app.ui.ErrorState
 import dev.lokalgrid.app.ui.CardSub
 import dev.lokalgrid.app.ui.CardTitle

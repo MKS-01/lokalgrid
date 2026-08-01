@@ -1,27 +1,38 @@
 <h1 align="center">lokalgrid</h1>
 
 <p align="center">
-  <strong>A shared field node. One board serves live position, a map and chat to a group of phones — over its own WiFi and BLE.</strong><br>
-  No internet. No server. No cell coverage. LoRa is the link <em>out</em> when WiFi range runs out.
+  <strong>A modern walkie-talkie.</strong> Text and live position, for whoever is in range.<br>
+  No internet. No server. No cell coverage. Text, not voice.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Works-with_no_internet-6366f1?style=for-the-badge&logo=wifi&logoColor=white" alt="Works with no internet">
-  <img src="https://img.shields.io/badge/ESP32--S3-ESP--IDF_·_C-black?style=for-the-badge&logo=espressif&logoColor=E7352C" alt="ESP32-S3, ESP-IDF, C">
-  <img src="https://img.shields.io/badge/LoRa-SX1262_·_1%25_duty-ec4899?style=for-the-badge&logo=rss&logoColor=white" alt="LoRa SX1262 at 1% duty cycle">
-  <img src="https://img.shields.io/badge/Android-Kotlin_·_Compose-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android, Kotlin, Compose">
+  <img src="https://img.shields.io/badge/Offline_first-6366f1?style=for-the-badge&logo=wifi&logoColor=white" alt="Offline first">
+  <img src="https://img.shields.io/badge/ESP32--S3-black?style=for-the-badge&logo=espressif&logoColor=E7352C" alt="ESP32-S3">
+  <img src="https://img.shields.io/badge/LoRa_SX1262-ec4899?style=for-the-badge&logo=rss&logoColor=white" alt="LoRa SX1262">
+  <img src="https://img.shields.io/badge/Kotlin_·_Compose-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Kotlin and Compose">
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tested_on-real_hardware-0ea5e9?style=flat" alt="Tested on real hardware">
-  <img src="https://img.shields.io/badge/transports-BLE_+_WiFi-64748b?style=flat" alt="Transports: BLE and WiFi">
-  <img src="https://img.shields.io/badge/9_clients-one_radio-64748b?style=flat" alt="9 clients, one radio">
+  <img src="https://img.shields.io/badge/early_prototype-f59e0b?style=flat" alt="Early prototype">
+  <img src="https://img.shields.io/badge/tested_on_real_hardware-0ea5e9?style=flat" alt="Tested on real hardware">
+  <img src="https://img.shields.io/badge/9_clients_·_one_radio-64748b?style=flat" alt="9 clients, one radio">
   <img src="https://img.shields.io/badge/MIT-22c55e?style=flat" alt="MIT License">
-  <img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat&logo=claude&logoColor=white" alt="Built with Claude Code">
+  <img src="https://img.shields.io/badge/Built_with_Claude_Code-D97757?style=flat&logo=claude&logoColor=white" alt="Built with Claude Code">
 </p>
 
 <p align="center">
-  <img src="docs/screens/01-boot.png" alt="Boot — the mark, the node it is opening, and what it is doing" width="170">
+  Started from <a href="https://meshtastic.org/">Meshtastic</a> — a mesh of nodes, a phone each.<br>
+  I have one board, so this goes the other way: one node, many phones, one radio to share.<br>
+  <sub>Written from the protocol spec, not forked — no Meshtastic code here.</sub>
+</p>
+
+> [!IMPORTANT]
+> **Weekend hobby project, early-stage prototype.** Built to play with the
+> protocol, not for real-world use. No support, no guarantees — use at your own
+> risk.
+
+<p align="center">
+  <img src="docs/screens/01-boot.png" alt="Boot — which node it is opening, and what it is doing" width="170">
   <img src="docs/screens/02-live.png" alt="Live — fix, uncertainty, people, cursor" width="170">
   <img src="docs/screens/03-map.png" alt="Map — everyone, each with its accuracy ring and age" width="170">
   <img src="docs/screens/04-chat.png" alt="Chat — delivered messages and the link-out queue reason" width="170"><br>
@@ -30,31 +41,28 @@
 
 ---
 
-Two properties define the build:
-
-- **One radio, up to nine clients.** Airtime is arbitrated: priority lanes,
-  deficit round-robin, a 1% duty cycle enforced in firmware, and queue state
-  rendered as a reason — "queued 56 s, bravo ahead of you" — not a spinner.
+- **One radio, up to nine clients.** Airtime is arbitrated across priority lanes
+  by deficit round-robin, at a 1% duty cycle enforced in firmware. Queue state
+  is rendered as a reason: *"queued 56 s, bravo ahead of you"*.
 - **Every position carries its uncertainty.** Accuracy ring from HDOP, dashed
-  interpolated segments, age label on a stale fix. Never a crisp dot.
+  interpolated segments, age label on a stale fix.
 
 ---
 
-## The node
+## Node
 
 **LilyGO T-Beam Supreme** — ESP32-S3, SX1262 LoRa, L76K GNSS, AXP2101 PMU, 1.3"
 OLED, BME280, PCF8563 RTC. ESP-IDF v5.3.1 firmware in `firmware/`.
 
 <p align="center">
-  <img src="docs/hardware.jpg" alt="The T-Beam Supreme on the bench, OLED lit, mid-boot" width="440"><br>
-  <sub>Mid-boot on the bench: <code>starting radios</code> on the OLED, and the band marking readable on the SX1262 module — which is where you check it.</sub>
+  <img src="docs/hardware.jpg" alt="T-Beam Supreme on the bench, OLED lit, mid-boot" width="440"><br>
+  <sub>Mid-boot on the bench: <code>starting radios</code> on the OLED, band marking readable on the SX1262 module.</sub>
 </p>
 
 **Radio:** never transmit without an antenna — the SX1262 PA is every damage
 path. Set the band from your own regulator's table, not from this repo: check
-the marking on the silkscreen beside the SMA connector, fit a whip that matches
-it, and stay inside whatever is licence-free where you are. Nothing transmits
-yet.
+the marking on the silkscreen beside the SMA connector, fit a matching whip, and
+stay inside whatever is licence-free where you are. Nothing transmits yet.
 
 ### Running today
 
@@ -65,20 +73,10 @@ yet.
 | **BLE** | GATT service, control + record characteristics in the §4 chunk framing |
 | **WiFi** | SoftAP serving `proto 2` at `ws://192.168.4.1/ws` |
 | **Storage** | LittleFS, single owning task |
-| **PMU** | Rails read before write; ALDO4 is the GNSS rail and boots off |
+| **PMU** | Rails read before write; ALDO4 is the GNSS rail, off at power-up |
 
-`hello.mode` reports `gnss` or `synthetic`, so a demo track cannot pass as a
-position.
-
-### Board facts that contradict the datasheets
-
-- **PSRAM is quad, not octal** — octal boot-loops.
-- **Two I²C buses.** `i2c0` (sda 17 / scl 18): OLED, BME280, magnetometer.
-  `i2c1` (sda 42 / scl 41): PMU, RTC.
-- **No QMI8658 fitted** — motion gate falls back to GNSS speed.
-- **BME280 is fitted**, not yet read; `baro` and `tmp` still write sentinels.
-- **Runs from USB, not a cell** — no battery percentage, and the power ladder has
-  nothing to measure.
+`hello.mode` reports `gnss` or `synthetic`, so clients can tell a real fix from
+a demo track.
 
 ### Verified on hardware
 
@@ -87,26 +85,51 @@ single roster that names each client's transport. Scan, connect, MTU
 negotiation, subscribe, join, backlog, live records and chat all run end to end
 against the real T-Beam on both wires.
 
-Open: a USB-JTAG breakpoint, and reading the BME280.
+Open: a USB-JTAG breakpoint and reading the BME280.
 
 ---
 
-## The app
+## App
 
-Native **Android** — Kotlin + Compose, in `android/`. Five tabs: **Live · Map ·
-Chat · Clients · Config**; Diagnostics behind a long-press on the title.
+Native **Android** — Kotlin + Compose, in `android/`. Every tab sends something,
+and every action gets a node-authored answer.
 
-- Live dot with accuracy ring on a MapLibre map, everyone at once
-- One shared chat channel, with a lane-0 emergency
-- Phone's own GNSS behind "share my position", node's fix as a *labelled* fallback
-- Per-client cursors with backlog resume; roster and rename
-- Staged-then-explicit config writes
-- Two basemaps, explicit offline download stating tile count and size first
-- Sockets pinned to the WiFi `Network`; bounded-backoff reconnect
-- BLE transport carrying the same session as the WebSocket
+### Working today
 
-Nothing is gated behind a live connection — every tab stays readable offline and
-reconnecting resumes from the cursor.
+| Tab | You do | Node answers |
+|---|---|---|
+| **Live** | share position · rename · reset track | peer fan-out or a skip reason; new roster; fresh track |
+| **Map** | share position | your dot and everyone else's, each with its ring and age |
+| **Chat** | send · send as emergency (lane 0) | `seq` echo, then live queue state until `relayed` |
+| **Clients** | rename on the roster | roster with per-client airtime meters, duty used, queue depth |
+| **Config** | stage edits, write explicitly | applied and refused, key by key, with reasons |
+| **Link** *(tap the status bar)* | grant permissions, reconnect, change node | an ordered flow: permissions · wifi · ble · session |
+
+Also working:
+
+- **Either transport, chosen at runtime** — WebSocket over the node's SoftAP, or
+  BLE GATT. Same session either way; the choice survives a restart.
+- **Resume, not restart** — a position cursor per node, stated on every connect,
+  so reopening after an hour fetches a delta. Recovered history draws as a track
+  line.
+- **Offline throughout** — nothing is gated behind a live connection. Every tab
+  stays readable with the node unreachable.
+- **Phone's own GNSS** behind "share my position", with the node's fix as a
+  *labelled* fallback.
+- **Two basemaps** with a user-initiated offline download that states tile count
+  and size first.
+- **Sockets pinned to the WiFi `Network`**, bounded-backoff reconnect, immediate
+  retry when WiFi changes.
+- **Diagnostics** behind a long-press on the title.
+
+Not built yet: the foreground sync service, and Room for the durable track (the
+cursor persists, the history is still in memory).
+
+**Android only. iOS is not supported and not planned.** The codec and control
+frames do sit apart in `:protocol`, a plain Kotlin module with no Android
+dependency, so the shareable half is already separated — but it is a JVM module
+leaning on `java.nio.ByteBuffer` and `java.util.zip.CRC32`, so Kotlin
+Multiplatform would be a port, not a switch.
 
 <p align="center">
   <img src="docs/screens/05-clients.png" alt="Clients — the roster with each client's transport" width="170">
@@ -122,7 +145,7 @@ reconnecting resumes from the cursor.
 
 ```mermaid
 flowchart LR
-    subgraph NODE["T-Beam Supreme · the node"]
+    subgraph NODE["T-Beam Supreme"]
         direction TB
         G["GNSS · L76K<br/>fix + time"] --> S
         P["PMU · AXP2101<br/>rails + charge"] --> S
@@ -135,19 +158,16 @@ flowchart LR
     S -. "LoRa · 1% duty" .-> C["a second node"]
 ```
 
-**Ownership rule.** The node is authoritative about *what exists* — seq, roster,
-admission. Each client is authoritative about *what it has received* — its
-cursor. Neither infers the other's state; it asks.
+The node is authoritative about *what exists* — seq, roster, admission. Each
+client is authoritative about *what it has received* — its cursor.
 
-**One protocol, two transports.** `proto 2` lives once in
-`firmware/main/session.c` behind a transport interface; the WebSocket and BLE
-GATT adapters are thin. One roster, one cap of nine, and the roster names each
-client's transport.
+`proto 2` lives once in `firmware/main/session.c` behind a transport interface;
+the WebSocket and BLE GATT adapters are thin. One roster, one cap of nine, and
+the roster names each client's transport.
 
 ### Airtime
 
-Three phones at 1 Hz already saturate ~1 kbit/s, so the scheduler is the normal
-case, not an optimisation.
+Three phones at 1 Hz saturate ~1 kbit/s. Four priority lanes:
 
 ```
 0  emergency   pre-empts everything, ignores fairness
@@ -156,24 +176,20 @@ case, not an optimisation.
 3  bulk        only when the budget is otherwise idle
 ```
 
-Each client gets 1/N of what lanes 0 and 1 leave. Unused allocation **decays
-rather than banks**, so an absent client cannot hoard and then flood. Admission
-control refuses at enqueue with a reason computed from the order the queue will
-actually transmit in — one service loop feeds both the plan and the transmit, so
-the UI cannot drift from the scheduler.
-
-A reason names its constraint. "queued 60 s" is a spinner with a number on it;
-"queued 60 s — radio duty-cycled" or "bravo ahead of you" is an answer.
+Each client gets 1/N of what lanes 0 and 1 leave; unused allocation decays
+rather than banks. Admission control refuses at enqueue with a reason computed
+from the order the queue will actually transmit in — one service loop feeds both
+the plan and the transmit.
 
 ### Degradation
 
 | Condition | Behaviour |
 |---|---|
-| 10th client connects | Refused with a reason, then closed — *node full — 9 of 9 clients*. The cap is NimBLE's ceiling. |
-| Relay queue full | Refused at enqueue, naming the depth and the duty cycle. Never silently dropped. |
-| Position barely moved | Skipped, with the distance that caused it — a silent skip looks like a dead GPS. |
-| Battery below threshold | The power ladder sheds a service and announces which, why, and how long the next rung lasts. |
-| Records aged out of the log | The backlog frame states how many were lost; the app drops its stale track rather than joining two unrelated stretches. |
+| 10th client connects | Refused with a reason, then closed — *node full — 9 of 9 clients* |
+| Relay queue full | Refused at enqueue, naming the depth and the duty cycle |
+| Position barely moved | Skipped, with the distance that caused it |
+| Battery below threshold | The power ladder sheds a service and announces which, why, and how long the next rung lasts |
+| Records aged out of the log | The backlog frame states how many were lost; the app drops its stale track |
 
 ---
 
@@ -183,28 +199,28 @@ A reason names its constraint. "queued 60 s" is a spinner with a number on it;
 |---|---|
 | **MCU** | [ESP-IDF](https://docs.espressif.com/projects/esp-idf/) v5.3.1 + CMake directly, target `esp32s3` |
 | **BLE** | [NimBLE](https://mynewt.apache.org/latest/network/) — GATT + GAP, `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=9` |
-| **Node storage** | [`esp_littlefs`](https://github.com/joltwallet/esp_littlefs) `^1.14` — the firmware's only external dependency |
+| **Node storage** | [`esp_littlefs`](https://github.com/joltwallet/esp_littlefs) `^1.14` — firmware's only external dependency |
 | **Node web** | `esp_http_server` with `CONFIG_HTTPD_WS_SUPPORT` |
 | **App** | [Kotlin](https://kotlinlang.org/) 2.0.21 + [Jetpack Compose](https://developer.android.com/compose), `arm64-v8a` + `x86_64` only |
 | **Map** | [MapLibre Android](https://maplibre.org/) 11.11.0 — keyless raster sources, no API key, 16 KB page-aligned |
 | **Mock node** | Node.js, serving the real protocol from a synthetic or replayed session |
 
-Chosen but **not yet built**: the SX1262 driver ([RadioLib](https://github.com/jgromes/RadioLib) as an IDF component),
-[Room](https://developer.android.com/training/data-storage/room) for the durable
-copy on the phone, and node-served PMTiles. None of the three is a dependency in
-the tree today.
+**Not built yet**, and not dependencies in the tree today: the SX1262 driver
+([RadioLib](https://github.com/jgromes/RadioLib)),
+[Room](https://developer.android.com/training/data-storage/room) for the
+durable copy on the phone, and node-served PMTiles.
 
 ---
 
-## The wire
+## Wire
 
-Positions are a **32-byte fixed-width little-endian record** — `offset = index * 32`.
+Positions are **32-byte fixed-width little-endian records** — `offset = index * 32`.
 The layout never shrinks per build; absent sensors write sentinels. Control —
 hello, roster, chat, queue state, config, stats, refusals — is one JSON object
 per text frame, both directions.
 
-The codec is written three times (JS in the mock, Kotlin in the app, C on the
-node) against a shared golden-vector fixture all three reproduce byte for byte.
+The codec is written three times — JS in the mock, Kotlin in the app, C on the
+node — against a shared golden-vector fixture all three reproduce byte for byte.
 
 **A session, start to finish:**
 
@@ -221,10 +237,9 @@ node → backlogDone  {cursor, live}                 // adopt this cursor
 node → binary …                                    // live records, 1 Hz
 ```
 
-Backlog is served in bounded chunks — sixty records per 250 ms tick — so a
-client returning after an hour catches up *beside* the live ones rather than
-blocking them. The node states what it owes before sending it, including how
-many records aged out, because a gap must be drawn as a gap.
+Backlog is served in bounded chunks — sixty records per 250 ms tick — interleaved
+with live traffic. The node states what it owes before sending it, including how
+many records aged out.
 
 Field table in [PROJECT.md §4](PROJECT.md); every control frame in
 [the spec](docs/lokalgrid-master-plan.html); frame-by-frame in
@@ -255,8 +270,7 @@ cd firmware && idf.py -p /dev/cu.usbmodem* flash
 
 Then either join the node's `lokalgrid` WiFi and point the app at
 `ws://192.168.4.1/ws`, or leave the phone on its normal WiFi and use **BLE**:
-status bar → Link → *Scan for nodes*. The node's AP has no internet behind it;
-BLE carries the same session and costs you nothing.
+status bar → Link → *Scan for nodes*. Both carry the same session.
 
 > [!TIP]
 > `cat /dev/cu.usbmodem*` returns **zero bytes**. The USB-Serial-JTAG console
@@ -277,9 +291,8 @@ cd firmware/test && ./run.sh                  # the C half, against the same vec
 
 **MIT** — see [`LICENSE`](LICENSE).
 
-- Meshtastic firmware is **GPL**. This firmware is written from the protocol
-  spec, not copied.
-- The mock node ships a neutral default start position (Greenwich). Set `LAT0`
-  and `LON0` to somewhere you know.
+---
 
-Issues and PRs welcome; personal build, no support commitment.
+<p align="center">
+  <sub>Built with <a href="https://claude.com/claude-code">Claude Code</a> — firmware, app, mock node, protocol and docs alike.</sub>
+</p>

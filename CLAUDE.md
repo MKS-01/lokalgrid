@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Three documents, three jobs — they are no longer mirrors of each other (rebuilt 2026-07-25):
 
 - **`PROJECT.md`** — the *decision record*. Why each choice was made, what was rejected and why, which decisions supersede which. Sections 1–6 are binding constraints; section 9 is where work resumes. Read before re-proposing anything.
-- **`lokalgrid-master-plan.html`** — the *reference spec*, in three parts: the hardware, the app, and the protocol where they meet, plus a state section listing what runs today and what is next. Only current, decided material — no history, no narrative.
+- **`docs/lokalgrid-master-plan.html`** — the *reference spec*, in three parts: the hardware, the app, and the protocol where they meet, plus a state section listing what runs today and what is next. Only current, decided material — no history, no narrative.
 - **`BUILDLOG.md`** — the *history*. Dated entry per session.
 
 When a decision changes, record it in PROJECT.md **and** update whatever the spec asserts about it. The spec never carries rationale; PROJECT.md never carries step-by-step detail. The project is named **Lokalgrid**.

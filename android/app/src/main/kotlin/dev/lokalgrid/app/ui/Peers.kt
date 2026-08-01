@@ -1,7 +1,6 @@
 package dev.lokalgrid.app.ui
 
 import dev.lokalgrid.app.LiveState
-import dev.lokalgrid.protocol.NodeFrame
 import dev.lokalgrid.protocol.TrackRecord
 import kotlin.math.atan2
 import kotlin.math.cos

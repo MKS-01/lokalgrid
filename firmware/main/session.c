@@ -975,8 +975,3 @@ uint8_t lg_session_clients(void)
 {
     return client_count();
 }
-
-bool lg_session_gnss_live(void)
-{
-    return s_gnss_live;
-}

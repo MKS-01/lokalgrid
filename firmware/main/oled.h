@@ -14,8 +14,6 @@
  *  there is no display — it says so and does nothing after that. */
 bool oled_init(uint8_t i2c_port);
 
-bool oled_present(void);
-
 /** Replace the whole screen with six lines of text, top to bottom. NULL or a
  *  short array is fine; missing lines are left blank. 21 characters fit.
  *  Line 0 is drawn as an inverted header bar. */

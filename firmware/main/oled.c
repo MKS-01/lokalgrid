@@ -188,11 +188,6 @@ bool oled_init(uint8_t i2c_port)
     return true;
 }
 
-bool oled_present(void)
-{
-    return s_dev != NULL;
-}
-
 void oled_lines(const char *const *lines, uint8_t count)
 {
     oled_lines_badge(lines, count, NULL);
